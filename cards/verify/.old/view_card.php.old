@@ -1,0 +1,272 @@
+<?php
+// view_card.php
+
+// 1. Get and Sanitize ID
+$id = $_GET['id'] ?? '';
+$safeID = preg_replace('/[^a-zA-Z0-9]/', '', $id);
+$filePath = $safeID . '.json';
+
+// 2. Load Data
+if (empty($safeID) || !file_exists($filePath)) {
+    die("ERROR: Card ID not found.");
+}
+
+$jsonContent = file_get_contents($filePath);
+$data = json_decode($jsonContent, true);
+$user = $data['userData'];
+
+// 3. Generate QR Code URL (using a public API for zero-setup generation)
+// We encode the verify URL into the QR code
+$qrData = urlencode("https://card.0x5ha157.xyz/verify/?id=" . $safeID); // Update with your actual domain if needed
+$qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=" . $qrData . "&color=ffffff&bgcolor=0d1117";
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Identity Card: <?php echo $safeID; ?></title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --card-bg: #161b22;
+            --text-color: #c9d1d9;
+            --cmd-color: #7ee787;  
+            --accent-color: #58a6ff;
+            --dim-color: #8b949e;
+            --border-color: #30363d;
+            --font-stack: 'Consolas', 'Monaco', monospace;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-stack);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+
+        /* --- THE CARD DESIGN --- */
+        #identity-card {
+            width: 600px;
+            background-color: var(--bg-color);
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            padding: 25px;
+            position: relative;
+            box-shadow: 0 0 30px rgba(0,0,0,0.5);
+            /* Important: Ensures the background is captured correctly */
+            background-image: radial-gradient(circle at top right, #1f242e 0%, #0d1117 60%);
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+            font-size: 0.8rem;
+            color: var(--cmd-color);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .main-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .details { flex: 1; }
+
+        .row {
+            margin-bottom: 12px;
+            display: flex;
+            align-items: baseline;
+        }
+
+        .label {
+            width: 80px;
+            color: var(--dim-color);
+            font-size: 0.85rem;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .value {
+            color: #fff;
+            font-weight: bold;
+            font-size: 1rem;
+            text-shadow: 0 0 2px rgba(255,255,255,0.1);
+        }
+
+        .qr-section {
+            width: 140px;
+            text-align: center;
+            border: 2px solid #fff;
+            padding: 5px;
+            background: #fff; /* White bg for QR readability */
+            border-radius: 4px;
+        }
+        
+        .qr-section img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .alien-text {
+            font-family: sans-serif; /* Fallback for special chars */
+            letter-spacing: 2px;
+            color: var(--accent-color);
+            margin-top: 10px;
+            text-align: center;
+            font-size: 0.9rem;
+        }
+
+        .footer {
+            margin-top: 25px;
+            border-top: 1px dashed var(--dim-color);
+            padding-top: 15px;
+            font-size: 0.75rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+        }
+
+        .pgp-key {
+            font-family: monospace;
+            color: var(--accent-color);
+            background: rgba(88, 166, 255, 0.1);
+            padding: 5px 10px;
+            border-radius: 4px;
+            border: 1px solid rgba(88, 166, 255, 0.2);
+        }
+
+        .ip-add {
+            color: var(--cmd-color);
+        }
+
+        /* --- CONTROLS --- */
+        .controls {
+            margin-top: 30px;
+            display: flex;
+            gap: 20px;
+        }
+
+        .btn {
+            background: transparent;
+            color: var(--cmd-color);
+            border: 2px solid var(--cmd-color);
+            padding: 10px 20px;
+            font-family: var(--font-stack);
+            font-weight: bold;
+            cursor: pointer;
+            text-decoration: none;
+            text-transform: uppercase;
+            transition: 0.2s;
+        }
+
+        .btn:hover {
+            background: var(--cmd-color);
+            color: var(--bg-color);
+            box-shadow: 0 0 15px var(--cmd-color);
+        }
+
+        .btn.download {
+            color: var(--accent-color);
+            border-color: var(--accent-color);
+        }
+        .btn.download:hover {
+            background: var(--accent-color);
+            color: var(--bg-color);
+            box-shadow: 0 0 15px var(--accent-color);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="identity-card">
+        <div class="header">
+            <span>● SECURE_CONNECTION</span>
+            <span>ID: <?php echo htmlspecialchars($data['id']); ?></span>
+        </div>
+
+        <div class="main-content">
+            <div class="details">
+                <div class="row">
+                    <span class="label">Name:</span>
+                    <span class="value"><?php echo htmlspecialchars($user['name']); ?></span>
+                </div>
+                <div class="row">
+                    <span class="label">Role:</span>
+                    <span class="value"><?php echo htmlspecialchars($user['role']); ?></span>
+                </div>
+                <div class="row">
+                    <span class="label">Email:</span>
+                    <span class="value"><?php echo htmlspecialchars($user['email']); ?></span>
+                </div>
+                <div class="row">
+                    <span class="label">Tel:</span>
+                    <span class="value"><?php echo htmlspecialchars($user['phone']); ?></span>
+                </div>
+                <div class="row">
+                    <span class="label">Certs:</span>
+                    <span class="value"><?php echo htmlspecialchars($user['certs']); ?></span>
+                </div>
+            </div>
+
+            <div class="qr-column">
+                <div class="qr-section">
+                    <img src="<?php echo $qrUrl; ?>" alt="QR Code">
+                </div>
+                <div class="alien-text">
+                    <?php echo htmlspecialchars($data['sga'] ?? '⊣⋮∷ᒲ'); ?>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <div>
+                <div style="color:var(--dim-color); margin-bottom:5px;">CLIENT_IP :: <span class="ip-add"><?php echo htmlspecialchars($data['ip']); ?></span></div>
+                <div style="color:var(--dim-color);">ROOT@0x5ha157:~#</div>
+            </div>
+            
+            <div style="text-align: right;">
+                <div style="color:var(--dim-color); margin-bottom:5px; font-size:0.6rem;">SESSION PGP KEY (STATIC)</div>
+                <div class="pgp-key"><?php echo htmlspecialchars($data['pgp']); ?></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="controls">
+        <a href="index.php?id=<?php echo $safeID; ?>" class="btn">Back</a>
+        <button onclick="downloadCard()" class="btn download">Download Copy</button>
+    </div>
+
+    <script>
+        function downloadCard() {
+            const cardElement = document.getElementById('identity-card');
+            
+            // Use html2canvas to take a screenshot of the specific div
+            html2canvas(cardElement, {
+                backgroundColor: "#0d1117", // Force dark background in image
+                scale: 2 // Higher resolution
+            }).then(canvas => {
+                // Create a fake link to trigger download
+                const link = document.createElement('a');
+                link.download = 'ID_<?php echo $safeID; ?>.png';
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            });
+        }
+    </script>
+</body>
+</html>

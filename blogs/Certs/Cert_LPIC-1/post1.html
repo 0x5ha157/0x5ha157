@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reading: linux-disk-management.md</title>
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --text-color: #c9d1d9;
+            --accent-color: #58a6ff;
+            --cmd-color: #7ee787;
+            --dim-color: #8b949e;
+            --code-bg: #161b22;
+            --body-font: 'Consolas', 'Monaco', 'Andale Mono', monospace;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--body-font);
+            padding: 2rem;
+            max-width: 800px;
+            margin: 0 auto;
+            line-height: 1.7;
+        }
+
+        /* Header */
+        .header { border-bottom: 1px solid #30363d; padding-bottom: 1rem; margin-bottom: 2rem; }
+        .prompt { color: var(--cmd-color); font-weight: bold; }
+        .path { color: var(--accent-color); }
+        .command { color: #fff; }
+
+        /* Typography */
+        h1 { font-size: 2rem; color: #fff; margin-bottom: 0.5rem; }
+        h2 { font-size: 1.4rem; color: var(--accent-color); margin-top: 2rem; margin-bottom: 1rem; border-bottom: 1px dashed #30363d; padding-bottom: 5px; }
+        h3 { font-size: 1.1rem; color: #fff; margin-top: 1.5rem; font-weight: bold; }
+        p { margin-bottom: 1rem; }
+        
+        .meta { font-size: 0.85rem; color: var(--dim-color); margin-bottom: 2rem; }
+        .meta::before { content: "stat: "; color: var(--cmd-color); }
+
+        /* Code Blocks */
+        pre {
+            background-color: var(--code-bg);
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 1rem;
+            overflow-x: auto;
+            margin-bottom: 1.5rem;
+            color: #d1d5da;
+        }
+        
+        code { font-family: 'Courier New', Courier, monospace; }
+        
+        /* Inline Code */
+        p code, li code {
+            background-color: rgba(110, 118, 129, 0.4);
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+        }
+
+        /* Lists */
+        ul { list-style: none; padding-left: 1rem; margin-bottom: 1rem; }
+        li::before { content: ">"; color: var(--cmd-color); margin-right: 10px; font-weight: bold; }
+
+        /* Links */
+        a { color: var(--accent-color); text-decoration: none; border-bottom: 1px dashed var(--accent-color); }
+        a:hover { background-color: rgba(88, 166, 255, 0.1); border-bottom: 1px solid var(--accent-color); }
+
+        /* Footer Navigation */
+        .footer-nav { margin-top: 4rem; text-align: center; color: var(--dim-color); font-size: 0.9rem; }
+        .nav-link { color: var(--cmd-color); font-weight: bold; }
+        
+        /* Cursor */
+        .cursor { display: inline-block; width: 10px; height: 1.2em; background-color: var(--cmd-color); animation: blink 1s step-end infinite; vertical-align: middle; }
+        @keyframes blink { 50% { opacity: 0; } }
+
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <span class="prompt">root@0x5ha157</span>:<span class="path">~/blog</span>$ <span class="command">cat 102_linux_install.md</span>
+    </div>
+
+    <article>
+        <h1>LPIC-1: Linux Disk Management</h1>
+        <div class="meta">
+            Topic: 102.1 | Author: 0x5ha157 | Status: Study Notes
+        </div>
+
+        <p>
+            Disks act as physical containers for data. Before we can use a disk in Linux, we must break it down into logical "fences" known as <strong>partitions</strong>. This compartmentalization allows us to separate User Data (<code>/home</code>) from OS Data (<code>/</code>), improving stability and security.
+        </p>
+
+        <h2>1. Partition Tables & Filesystems</h2>
+        <p>
+            Every disk requires at least one partition. The information about where partitions start and end is stored in the <strong>Partition Table</strong>. There are two main standards:
+        </p>
+        <ul>
+            <li><strong>MBR (Master Boot Record):</strong> Legacy standard. Supports up to 4 primary partitions and disks up to 2TB.</li>
+            <li><strong>GPT (GUID Partition Table):</strong> Modern standard. Part of UEFI. Supports nearly unlimited partitions and huge disks.</li>
+        </ul>
+
+        <p>
+            Inside each partition lives a <strong>Filesystem (FS)</strong>. The FS acts as the librarian, organizing how files and directories relate to one another. Common Linux filesystems include <code>ext4</code>, <code>xfs</code>, and <code>btrfs</code>.
+        </p>
+
+        <h2>2. LVM (Logical Volume Manager)</h2>
+        <p>
+            Traditionally, a partition cannot span across multiple physical disks. <strong>LVM</strong> solves this limitation. It abstracts physical storage into logical "pools".
+        </p>
+        <p>
+            <strong>Why use LVM?</strong>
+        </p>
+        <ul>
+            <li><strong>Flexibility:</strong> You can resize partitions (Logical Volumes) on the fly.</li>
+            <li><strong>Spanning:</strong> A single logical volume can be spread across multiple hard drives.</li>
+            <li><strong>Snapshots:</strong> Take backups of the system state before making changes.</li>
+        </ul>
+
+        <h2>3. Mount Points</h2>
+        <p>
+            Unlike Windows which uses drive letters (C:, D:), Linux uses a single directory tree. To access a filesystem, it must be <strong>mounted</strong> to a specific directory.
+        </p>
+
+<pre><code># Example: Viewing directory contents
+[02:37 PM]-[0x5ha157@0x5ha157-Dell]-[/home]-
+$ ls
+0x5ha157  0xt3m4</code></pre>
+
+        <h3>Key Mount Hierarchies:</h3>
+        <ul>
+            <li><code>/mnt</code>: Historically used for temporary manual mounts (admin mounting a USB to fix it).</li>
+            <li><code>/media</code>: The modern default for auto-mounting removable media. Usually appears as <code>/media/USER/LABEL</code>.</li>
+        </ul>
+        <p>
+            <em>Best Practice:</em> If you are manually mounting a filesystem permanently, you might often use specific folders you create, but for temporary admin work, stick to <code>/mnt</code>.
+        </p>
+
+        <h2>4. The Boot Partition (/boot)</h2>
+        <p>
+            This partition contains the kernel (<code>vmlinuz</code>), initial RAM disk (<code>initrd</code>), and bootloader configuration (GRUB2).
+        </p>
+        <ul>
+            <li><strong>Location:</strong> Usually the first partition on the disk.</li>
+            <li><strong>Size:</strong> Historically ended before cylinder 1024 (528 MB) to ensure old BIOS could read it. Modern practice suggests 512MB-1GB.</li>
+            <li><strong>Safety:</strong> Keeping <code>/boot</code> separate ensures the system can still load the kernel even if the root filesystem (<code>/</code>) gets corrupted.</li>
+        </ul>
+
+        <h2>5. The EFI System Partition (ESP)</h2>
+        <p>
+            For modern machines using <strong>UEFI</strong> (Unified Extensible Firmware Interface) instead of BIOS, an ESP is required.
+        </p>
+        <ul>
+            <li><strong>Format:</strong> Must be formatted as <strong>FAT32</strong> (unlike the rest of Linux which uses ext4/xfs).</li>
+            <li><strong>Identifier:</strong> On GPT disks, it has a specific Globally Unique Identifier so the firmware finds it immediately on power-up.</li>
+            <li><strong>Mount Point:</strong> Typically mounted at <code>/boot/efi</code>.</li>
+        </ul>
+    </article>
+
+    <div class="footer-nav">
+        <span class="prompt">root@0x5ha157</span>:<span class="path">~/blog</span>$ <span class="command">cd ..</span> <span class="cursor"></span>
+        <br><br>
+        [ <a href="index.html" class="nav-link">Return to Blog Index</a> ] | [ <a href="/" class="nav-link">Return to Home</a> ]
+    </div>
+
+</body>
+</html>

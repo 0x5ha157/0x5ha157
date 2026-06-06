@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SECURE UPLINK</title>
+    <style>
+        body {
+            background-color: #0d1117; color: #c9d1d9;
+            font-family: 'Consolas', monospace;
+            display: flex; flex-direction: column;
+            height: 100vh; margin: 0; padding: 20px; box-sizing: border-box;
+        }
+        .header {
+            display: flex; justify-content: space-between; border-bottom: 1px solid #30363d;
+            padding-bottom: 10px; margin-bottom: 10px;
+        }
+        .back-btn {
+            color: #d29922; text-decoration: none; border: 1px solid #30363d;
+            padding: 5px 10px; border-radius: 4px;
+        }
+        .back-btn:hover { border-color: #d29922; }
+        
+        #chat-window {
+            flex: 1; border: 1px solid #30363d; background: #010409;
+            padding: 15px; overflow-y: auto; border-radius: 6px;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+        }
+        #chat-window::-webkit-scrollbar { width: 8px; }
+        #chat-window::-webkit-scrollbar-thumb { background: #30363d; }
+
+        .msg { margin-bottom: 8px; border-bottom: 1px dashed #30363d; padding-bottom: 4px; }
+        .time { color: #8b949e; font-size: 0.8rem; margin-right: 10px; }
+        .user { color: #58a6ff; font-weight: bold; }
+        .text { color: #fff; margin-left: 5px; }
+
+        .input-area {
+            display: flex; margin-top: 15px; gap: 10px;
+        }
+        input {
+            flex: 1; background: #0d1117; border: 1px solid #30363d;
+            color: white; padding: 15px; font-family: monospace; font-size: 1rem;
+        }
+        input:focus { outline: 1px solid #58a6ff; }
+        button {
+            background: #238636; color: white; border: none; padding: 0 25px;
+            font-weight: bold; cursor: pointer;
+        }
+        button:hover { background: #2ea043; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div>
+            <h2 style="margin:0; color: #2ea043;">// SECURE_UPLINK_ESTABLISHED</h2>
+            <small style="color: #8b949e;">Encryption: AES-256 (Simulated)</small>
+        </div>
+        <a href="../index.nginx-debian.html" class="back-btn">< DISCONNECT</a>
+    </div>
+
+    <div id="chat-window">
+        <div style="color: #d29922;">> Initializing connection...</div>
+    </div>
+
+    <div class="input-area">
+        <input type="text" id="msg-input" placeholder="Type message..." autocomplete="off">
+        <button onclick="sendMsg()">SEND</button>
+    </div>
+
+    <script>
+        const USER_ID = "guest_" + Math.floor(Math.random() * 1000);
+        
+        function loadChat() {
+            fetch('chat_api.php')
+            .then(res => res.text())
+            .then(data => {
+                const box = document.getElementById('chat-window');
+                const isScrolledToBottom = box.scrollHeight - box.clientHeight <= box.scrollTop + 50;
+                box.innerHTML = data;
+                if(isScrolledToBottom) box.scrollTop = box.scrollHeight;
+            });
+        }
+
+        function sendMsg() {
+            const input = document.getElementById('msg-input');
+            const msg = input.value;
+            if (!msg) return;
+
+            const formData = new FormData();
+            formData.append('user', USER_ID);
+            formData.append('msg', msg);
+
+            fetch('chat_api.php', { method: 'POST', body: formData })
+            .then(() => {
+                input.value = '';
+                loadChat();
+                const box = document.getElementById('chat-window');
+                box.scrollTop = box.scrollHeight;
+            });
+        }
+
+        document.getElementById('msg-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMsg();
+        });
+
+        setInterval(loadChat, 2000);
+        loadChat();
+    </script>
+</body>
+</html>

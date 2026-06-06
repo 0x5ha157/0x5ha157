@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arr Stack Deployment Engine (Proxmox LCX)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        :root {
+            --bg-color: #0b0f14;
+            --card-color: #11161d;
+            --border-color: #212830;
+            --text-color: #c9d1d9;
+            --error-color: #ff7b72;
+            --cmd-color: #7ee787;
+            --accent-color: #58a6ff;
+            --dim-color: #8b949e;
+            --font-stack: 'Consolas', 'Monaco', 'Andale Mono', monospace;
+            --crt-scanline: rgba(18, 16, 16, 0.2);
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-stack);
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        /* CRT SCANLINE & GLOW EFFECTS */
+        body::before {
+            content: " ";
+            display: block;
+            position: fixed;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, var(--crt-scanline) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 4px, 6px 100%;
+            z-index: 99999;
+            pointer-events: none;
+            opacity: 0.85;
+        }
+
+        .crt-glow {
+            text-shadow: 0 0 4px rgba(201, 209, 217, 0.4);
+        }
+
+        .accent-glow {
+            text-shadow: 0 0 6px rgba(88, 166, 255, 0.6);
+        }
+
+        .success-glow {
+            text-shadow: 0 0 6px rgba(126, 231, 135, 0.6);
+        }
+
+        .error-glow {
+            text-shadow: 0 0 6px rgba(255, 123, 114, 0.6);
+        }
+
+        /* CUSTOM UTILITIES */
+        .terminal-panel {
+            background-color: var(--card-color);
+            border: 1px solid var(--border-color);
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+        }
+
+        .terminal-panel:hover {
+            border-color: var(--accent-color);
+        }
+
+        .nav-btn {
+            background-color: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--dim-color);
+            transition: all 0.2s ease-in-out;
+        }
+
+        .nav-btn:hover, .nav-btn.active {
+            border-color: var(--accent-color);
+            color: #fff;
+            box-shadow: 0 0 10px rgba(88, 166, 255, 0.15);
+        }
+
+        .state-active-secure {
+            color: var(--cmd-color);
+            border-color: var(--cmd-color);
+            box-shadow: 0 0 15px rgba(126, 231, 135, 0.15);
+        }
+
+        .state-active-compromised {
+            color: var(--accent-color);
+            border-color: var(--accent-color);
+            box-shadow: 0 0 15px rgba(88, 166, 255, 0.15);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: var(--bg-color);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--accent-color);
+        }
+
+        .chart-container {
+            position: relative;
+            width: 100%;
+            height: 280px;
+        }
+
+        .log-line {
+            opacity: 0;
+            transform: translateY(2px);
+            animation: revealLine 0.2s forwards;
+        }
+
+        @keyframes revealLine {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col p-4 md:p-6">
+
+    <header class="w-full max-w-7xl mx-auto mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-[#212830] pb-4">
+        <div>
+            <div class="flex items-center gap-3">
+                <span class="text-xl md:text-2xl text-sky-400 crt-glow">⚙️</span>
+                <h1 class="text-lg md:text-2xl font-bold tracking-wider text-slate-100 crt-glow">ARR STACK DEPLOYMENT ENGINE (PROXMOX LCX)</h1>
+            </div>
+            <p class="text-xs text-slate-400 mt-1 uppercase tracking-widest font-mono">Self-Guided Guide &bull; Portainer vs. Docker Compose Deployment Pipelines</p>
+        </div>
+        
+        <div class="flex flex-wrap gap-3 items-center text-xs">
+            <div class="bg-[#11161d] border border-[#212830] px-3 py-1.5 rounded flex items-center gap-2">
+                <span class="text-slate-500">CONTAINER_OS:</span>
+                <span class="text-slate-300 font-mono">Debian 12 / Ubuntu 22.04</span>
+            </div>
+            <div class="bg-[#11161d] border border-[#212830] px-3 py-1.5 rounded flex items-center gap-2">
+                <span class="text-slate-500">SYS_TIME:</span>
+                <span id="live-clock" class="text-slate-300 font-bold">00:00:00</span>
+            </div>
+            <div class="bg-[#11161d] border border-[#212830] px-3 py-1.5 rounded flex items-center gap-2">
+                <span class="text-slate-500">NESTING_REQ:</span>
+                <span class="text-amber-400 font-bold">ENABLED (nesting=1)</span>
+            </div>
+        </div>
+    </header>
+
+    <section class="w-full max-w-7xl mx-auto mb-6 bg-[#11161d] border border-[#212830] p-4 rounded-lg flex flex-col md:flex-row justify-between items-center gap-4">
+        <div>
+            <h3 class="text-sm font-bold text-slate-200 tracking-wider">SIMULATED ENVIRONMENT RUNTIME STATE</h3>
+            <p class="text-xs text-slate-500 mt-0.5">Toggle this global controller to view terminal maps and system health telemetry transition from an empty environment to an active stack.</p>
+        </div>
+        <div class="flex gap-4">
+            <button id="btn-state-secure" class="px-5 py-2 text-xs font-bold rounded border uppercase tracking-wider transition-all duration-200 state-active-secure" onclick="toggleSystemState('secure')">
+                ● Bare Pre-requisites Base
+            </button>
+            <button id="btn-state-compromised" class="px-5 py-2 text-xs font-bold rounded border uppercase tracking-wider transition-all duration-200" onclick="toggleSystemState('compromised')">
+                ○ Active Stack Orchestrated
+            </button>
+        </div>
+    </section>
+
+    <main class="w-full max-w-7xl mx-auto flex-grow flex flex-col lg:flex-row gap-6">
+        
+        <aside class="w-full lg:w-1/4 flex flex-col gap-4 shrink-0">
+            <div class="bg-[#11161d] border border-[#212830] p-4 rounded-lg">
+                <h2 class="text-xs font-bold text-slate-400 tracking-wider mb-3 uppercase">Tutorial Steps</h2>
+                <nav class="flex flex-col gap-2" id="nav-tabs">
+                    <button class="nav-btn active text-left px-4 py-2.5 rounded text-xs tracking-wider" onclick="switchTab('dashboard')">
+                        [00] OVERVIEW & PREREQS
+                    </button>
+                    <button class="nav-btn text-left px-4 py-2.5 rounded text-xs tracking-wider" onclick="switchTab('topology')">
+                        [01] ARCHITECTURE & VOLUMES
+                    </button>
+                    <button class="nav-btn text-left px-4 py-2.5 rounded text-xs tracking-wider" onclick="switchTab('mechanics')">
+                        [02] METHOD 1: PORTAINER GUI
+                    </button>
+                    <button class="nav-btn text-left px-4 py-2.5 rounded text-xs tracking-wider" onclick="switchTab('compose')">
+                        [03] METHOD 2: DOCKER COMPOSE
+                    </button>
+                    <button class="nav-btn text-left px-4 py-2.5 rounded text-xs tracking-wider" onclick="switchTab('forensics')">
+                        [04] TELEMETRY DIAGNOSTICS
+                    </button>
+                    <button class="nav-btn text-left px-4 py-2.5 rounded text-xs tracking-wider" onclick="switchTab('timeline')">
+                        [05] REMEDIATION ROADMAP
+                    </button>
+                </nav>
+            </div>
+
+            <div class="bg-[#11161d] border border-[#212830] p-4 rounded-lg text-xs leading-relaxed text-slate-400">
+                <h4 class="font-bold text-slate-300 tracking-wider mb-2 uppercase">Instructor Notes</h4>
+                <p class="mb-2">This configuration sandbox provides automated copy-paste files and volume path hierarchies to successfully build a fully automated home media engine.</p>
+                <p class="text-sky-400">Pro-Tip: Toggle "Active Stack Orchestrated" above at any time to instantly populate dynamic health dashboards and memory charts mapping active service containers.</p>
+            </div>
+        </aside>
+
+        <section class="flex-grow w-full lg:w-3/4">
+
+            <div id="tab-dashboard" class="tab-content flex flex-col gap-6">
+                <div class="terminal-panel p-5 rounded-lg">
+                    <h3 class="text-sm font-bold text-slate-300 tracking-wider mb-2 uppercase border-b border-[#212830] pb-2">Module Initialization: The Proxmox LCX Foundation</h3>
+                    <p class="text-xs text-slate-400 leading-relaxed">
+                        To run an efficient home server media pipeline, deploying inside an unprivileged **Linux Container (LCX)** on Proxmox VE offers near-native hardware speed with minimal RAM waste. Because Docker applications require isolation, the container configuration files must be modified to permit system nesting features prior to initializing package dependencies.
+                    </p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="terminal-panel p-4 rounded-lg">
+                        <span class="text-[10px] text-slate-500 uppercase tracking-widest font-semibold block">DOCKER_ENGINE</span>
+                        <div class="text-xl font-bold tracking-wider mt-1 font-mono uppercase text-[#7ee787] success-glow" id="metric-integrity">ACTIVE</div>
+                        <p class="text-[10px] text-slate-500 mt-1 italic leading-tight" id="desc-integrity">Docker CE daemon running smoothly on host socket endpoints.</p>
+                    </div>
+                    <div class="terminal-panel p-4 rounded-lg">
+                        <span class="text-[10px] text-slate-500 uppercase tracking-widest font-semibold block">STACK_PROVISIONING</span>
+                        <div class="text-xl font-bold tracking-wider mt-1 font-mono uppercase text-amber-400" id="metric-resolver">EMPTY_BASE</div>
+                        <p class="text-[10px] text-slate-500 mt-1 italic leading-tight" id="desc-resolver">Pre-requisite files installed. Awaiting runtime app definitions.</p>
+                    </div>
+                    <div class="terminal-panel p-4 rounded-lg">
+                        <span class="text-[10px] text-slate-500 uppercase tracking-widest font-semibold block">ACTIVE_CONTAINERS</span>
+                        <div class="text-xl font-bold tracking-wider mt-1 font-mono uppercase text-slate-400" id="metric-shells">0 CONTAINERS</div>
+                        <p class="text-[10px] text-slate-500 mt-1 italic leading-tight" id="desc-shells">No Arr service modules running within active network bridges.</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="terminal-panel p-5 rounded-lg flex flex-col">
+                        <h3 class="text-xs font-bold text-slate-300 tracking-wider mb-3 uppercase flex items-center gap-2"><span>📃</span> PROXMOX LCX PRE-REQUISITES</h3>
+                        <p class="text-xs text-slate-400 leading-relaxed mb-4">
+                            1. Create a container using an **Ubuntu 22.04** or **Debian 12** template. Uncheck the "Unprivileged container" box if configuring direct NFS mounts, or keep it checked and enable **Nesting** under <span class="font-mono text-sky-400">Options -> Features</span>.
+                        </p>
+                        <p class="text-xs text-slate-400 leading-relaxed">
+                            2. Access the Proxmox host terminal and verify nesting permissions are active by inspecting your container schema settings profile file:
+                            <span class="font-mono block bg-black text-amber-400 p-2 rounded border border-slate-800 mt-1">cat /etc/pve/lxc/[YOUR_ID].conf</span>
+                        </p>
+                    </div>
+
+                    <div class="terminal-panel p-5 rounded-lg flex flex-col justify-between">
+                        <div>
+                            <h3 class="text-xs font-bold text-slate-300 tracking-wider mb-3 uppercase">SYSTEM BOOTSTRAP COMMANDS</h3>
+                            <p class="text-[11px] text-slate-400 mb-2">Execute inside the LCX console to set up your environment base:</p>
+                            <div class="space-y-1 font-mono text-[10px] bg-black p-3 rounded border border-slate-800">
+                                <div class="text-slate-400"># Update system packages</div>
+                                <div class="text-sky-400">apt update && apt upgrade -y</div>
+                                <div class="text-slate-400 mt-2"># Fast-track Docker installation via convenience script</div>
+                                <div class="text-sky-400">curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh</div>
+                            </div>
+                        </div>
+                        <div class="bg-black p-3 rounded border border-slate-800 text-[10px] mt-4">
+                            <span class="text-[#7ee787]">&gt; TARGET STATUS:</span>
+                            <p class="text-slate-400 mt-1 leading-normal" id="integrity-status-paragraph">Docker baseline verified. Choose an administrative deployment strategy using the tabs above.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="tab-topology" class="tab-content hidden flex flex-col gap-6">
+                <div class="terminal-panel p-5 rounded-lg">
+                    <h3 class="text-xs font-bold text-slate-300 tracking-wider mb-2 uppercase border-b border-[#212830] pb-2">Arr Architecture & Shared Storage Map</h3>
+                    <p class="text-xs text-slate-400 leading-relaxed">
+                        To enable seamless handshakes between services, all containers must communicate through a shared network bridge and mount matching folder structures. This layout ensures atomic file moves, preventing data duplication. **Click any map component to inspect its data structure.**
+                    </p>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-2 terminal-panel p-6 rounded-lg flex flex-col justify-center items-center relative min-h-[350px]">
+                        <div class="border border-slate-700 bg-[#0d1117] p-3 rounded text-center w-64 hover:border-sky-400 cursor-pointer transition-all mb-8 shadow-md" onclick="selectNode('prowlarr')">
+                            <div class="text-lg">📡</div>
+                            <h4 class="font-bold text-xs text-slate-300">1. PROWLARR (INDEXERS)</h4>
+                            <span class="text-[9px] text-slate-500 font-mono">Port 9696 &bull; Syncs API Tracker Keys</span>
+                        </div>
+
+                        <div class="border border-sky-600 bg-sky-950/20 p-3 rounded text-center w-56 hover:border-sky-400 cursor-pointer transition-all mb-8 relative shadow-md" onclick="selectNode('coordinators')">
+                            <div class="absolute -top-8 left-1/2 w-0.5 h-8 bg-slate-700 transform -translate-x-1/2"></div>
+                            <div class="text-lg">🎬</div>
+                            <h4 class="font-bold text-xs text-sky-400">2. RADARR & SONARR</h4>
+                            <span class="text-[9px] text-slate-500 font-mono">Ports 7878 & 8989 &bull; Quality Evaluators</span>
+                        </div>
+
+                        <div class="flex justify-between w-full max-w-md mt-2 relative">
+                            <div class="absolute -top-8 left-1/2 w-full border-t border-slate-700 h-8 max-w-[280px] transform -translate-x-1/2"></div>
+                            <div class="absolute -top-8 left-1/2 w-0.5 h-8 bg-slate-700 transform -translate-x-1/2"></div>
+                            
+                            <div class="border border-red-900 bg-red-950/20 p-3 rounded text-center w-40 hover:border-red-400 cursor-pointer transition-all shadow-md relative" onclick="selectNode('downloader')">
+                                <div class="absolute -top-8 left-1/2 w-0.5 h-8 bg-slate-700 transform -translate-x-1/2"></div>
+                                <div class="text-lg">📥</div>
+                                <h4 class="font-bold text-xs text-red-400">3A. qBITTORRENT</h4>
+                                <span class="text-[9px] text-slate-500 font-mono">Port 8080 &bull; Network Fetch Client</span>
+                            </div>
+
+                            <div class="border border-emerald-900 bg-emerald-950/20 p-3 rounded text-center w-40 hover:border-emerald-400 cursor-pointer transition-all shadow-md relative" onclick="selectNode('storage')">
+                                <div class="absolute -top-8 left-1/2 w-0.5 h-8 bg-slate-700 transform -translate-x-1/2"></div>
+                                <div class="text-lg">🗄️</div>
+                                <h4 class="font-bold text-xs text-emerald-400">3B. /data ATOMIC ROOT</h4>
+                                <span class="text-[9px] text-slate-500 font-mono">Unified Mount Point Target</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="terminal-panel p-5 rounded-lg flex flex-col" id="topology-info-box">
+                        <div class="text-center my-auto text-slate-500 text-xs italic">
+                            [AWAITING_INPUT]<br>Click any system node on the left topology schematic layout to inspect its targeted directory volume variables and access endpoints.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="tab-mechanics" class="tab-content hidden flex flex-col gap-6">
+                <div class="terminal-panel p-5 rounded-lg">
+                    <h3 class="text-xs font-bold text-slate-300 tracking-wider mb-2 uppercase border-b border-[#212830] pb-2">Method 1: Graphical Portainer UI Deployment</h3>
+                    <p class="text-xs text-slate-400 leading-relaxed">
+                        For users who prefer managing their environment via a web console, Portainer provides a high-fidelity GUI orchestration layer. Follow the terminal steps below to install Portainer, access its portal, and deploy your services.
+                    </p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="terminal-panel p-5 rounded-lg">
+                        <h4 class="text-xs font-bold text-slate-300 mb-3 uppercase">STEP 1: PROVISION PORTAINER SERVER CONTAINER</h4>
+                        <p class="text-xs text-slate-400 leading-relaxed mb-3">
+                            Execute the following command block inside your root LCX terminal to map storage parameters and initialize the permanent management engine:
+                        </p>
+                        <div class="bg-black p-3 rounded text-[10px] font-mono border border-slate-800 text-sky-400 break-words leading-relaxed select-all">
+                            docker volume create portainer_data && \<br>
+                            docker run -d -p 8000:8000 -p 9443:9443 --name portainer --restart always \<br>
+                            -v /var/run/docker.sock:/var/run/docker.sock \<br>
+                            -v portainer_data:/data portainer/portainer-ce:latest
+                        </div>
+                        <p class="text-xs text-slate-400 leading-relaxed mt-3">
+                            Open your web browser and navigate to <span class="font-mono text-amber-400">https://[LCX_IP_ADDRESS]:9443</span> to create your administrative profile.
+                        </p>
+                    </div>
+
+                    <div class="terminal-panel p-5 rounded-lg flex flex-col justify-between">
+                        <div>
+                            <h4 class="text-xs font-bold text-slate-300 mb-3 uppercase">STEP 2: GUI STACK DEPLOYMENT STEPS</h4>
+                            <ol class="space-y-2.5 text-xs text-slate-400">
+                                <li class="flex gap-2">
+                                    <span class="text-sky-400 font-bold">[1]</span>
+                                    <span>Log in to Portainer and select your <strong>Local Environment</strong>.</span>
+                                </li>
+                                <li class="flex gap-2">
+                                    <span class="text-sky-400 font-bold">[2]</span>
+                                    <span>Navigate to the left sidebar menu and click <strong>Stacks -> Add Stack</strong>.</span>
+                                </li>
+                                <li class="flex gap-2">
+                                    <span class="text-sky-400 font-bold">[3]</span>
+                                    <span>Name the template <span class="font-mono text-slate-200">arr-production-stack</span>.</span>
+                                </li>
+                                <li class="flex gap-2">
+                                    <span class="text-sky-400 font-bold">[4]</span>
+                                    <span>Copy and paste the configuration schema from the <strong>Docker Compose</strong> tab into the web editor window, then click <strong>Deploy Stack</strong>.</span>
+                                </li>
+                            </ol>
+                        </div>
+                        
+                        <div class="border border-slate-800 bg-black p-4 rounded mt-4">
+                            <span class="text-xs text-slate-500 font-bold uppercase block mb-1">Portainer Network Binding Target</span>
+                            <div class="text-[11px] font-mono space-y-1 text-slate-300" id="mechanic-got-state">
+                                LOCAL SOCKET: <span class="text-[#7ee787]">/var/run/docker.sock (BOUND)</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="tab-compose" class="tab-content hidden flex flex-col gap-6">
+                <div class="terminal-panel p-5 rounded-lg">
+                    <h3 class="text-xs font-bold text-slate-300 tracking-wider mb-2 uppercase border-b border-[#212830] pb-2">Method 2: Command-Line Infrastructure as Code (YAML Stack)</h3>
+                    <p class="text-xs text-slate-400 leading-relaxed">
+                        Deploying your configuration via terminal automation offers full environment control. This single script sets up your persistent storage directory boundaries, maps internal ports, and handles container dependencies.
+                    </p>
+                </div>
+
+                <div class="terminal-panel p-5 rounded-lg">
+                    <div class="flex justify-between items-center mb-2 border-b border-[#212830] pb-2">
+                        <h4 class="text-xs font-bold text-slate-300 uppercase tracking-wider">📦 UNIFIED PRODUCTION DOCKER-COMPOSE.YML FILE</h4>
+                        <span class="text-[10px] text-slate-500 font-mono">TARGET PATH: /opt/arr-stack/docker-compose.yml</span>
+                    </div>
+                    <pre class="bg-black p-4 rounded text-[11px] font-mono border border-slate-800 text-emerald-400 overflow-x-auto max-h-[350px] leading-relaxed select-all">
+version: "3.8"
+services:
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+    volumes:
+      - /opt/arr-stack/prowlarr-config:/config
+    ports:
+      - 9696:9696
+    restart: unless-stopped
+
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+    volumes:
+      - /opt/arr-stack/radarr-config:/config
+      - /data:/data
+    ports:
+      - 7878:7878
+    restart: unless-stopped
+
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+    volumes:
+      - /opt/arr-stack/sonarr-config:/config
+      - /data:/data
+    ports:
+      - 8989:8989
+    restart: unless-stopped
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+      - WEBUI_PORT=8080
+    volumes:
+      - /opt/arr-stack/qbittorrent-config:/config
+      - /data:/data
+    ports:
+      - 8080:8080
+      - 6881:6881
+      - 6881:6881/udp
+    restart: unless-stopped</pre>
+                    <div class="mt-4 text-xs text-slate-400 leading-relaxed">
+                        To activate this stack, run <span class="font-mono bg-black text-amber-400 px-1.5 py-0.5 rounded">mkdir -p /opt/arr-stack /data && cd /opt/arr-stack</span>, paste the text block above into a new <span class="font-mono text-slate-200">docker-compose.yml</span> file, and execute:
+                        <span class="font-mono block bg-black text-sky-400 p-2.5 rounded border border-slate-800 mt-2">docker compose up -d</span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="tab-forensics" class="tab-content hidden flex flex-col gap-6">
+                <div class="terminal-panel p-5 rounded-lg">
+                    <h3 class="text-xs font-bold text-slate-300 tracking-wider mb-2 uppercase border-b border-[#212830] pb-2">Live Telemetry & Diagnostics Output</h3>
+                    <p class="text-xs text-slate-400 leading-relaxed">
+                        Verify system stability metrics and path definitions through this live diagnostic dashboard. **Select a script command below** to query engine properties and review service resource allocations.
+                    </p>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-1 flex flex-col gap-3">
+                        <h4 class="text-xs font-bold text-slate-400 uppercase tracking-widest">Diagnostic Automation Scripts</h4>
+                        <button class="text-left bg-[#11161d] hover:bg-[#1a202c] border border-[#212830] hover:border-[#58a6ff] p-3 rounded text-xs transition-all font-mono text-slate-300" onclick="runDiagnostic('pstree')">
+                            &gt; docker ps --format "table {{.Names}}\t{{.Status}}"
+                        </button>
+                        <button class="text-left bg-[#11161d] hover:bg-[#1a202c] border border-[#212830] hover:border-[#58a6ff] p-3 rounded text-xs transition-all font-mono text-slate-300" onclick="runDiagnostic('maps')">
+                            &gt; find /data -maxdepth 2 -type d
+                        </button>
+                        <button class="text-left bg-[#11161d] hover:bg-[#1a202c] border border-[#212830] hover:border-[#58a6ff] p-3 rounded text-xs transition-all font-mono text-slate-300" onclick="runDiagnostic('pcap')">
+                            &gt; docker stats --no-stream
+                        </button>
+                    </div>
+
+                    <div class="lg:col-span-2 flex flex-col bg-black border border-[#212830] rounded-lg overflow-hidden min-h-[250px] shadow-inner">
+                        <div class="bg-[#11161d] px-4 py-2 border-b border-[#212830] flex justify-between items-center text-xs">
+                            <span class="font-mono text-slate-400">SHELL_LOGGER: engine_status.log</span>
+                            <span id="console-status-dot" class="w-2.5 h-2.5 rounded-full bg-[#7ee787] animate-pulse"></span>
+                        </div>
+                        <div class="p-4 font-mono text-[11px] text-slate-300 overflow-y-auto max-h-[200px] flex-grow leading-relaxed" id="diagnostic-stdout">
+                            <div class="text-slate-500 italic">[SYSTEM_READY] Select a diagnostic telemetry script on the left panel to execute real-time parsing analysis...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="terminal-panel p-4 rounded-lg flex flex-col">
+                        <h4 class="text-xs font-bold text-slate-300 mb-3 text-center uppercase tracking-wider">Unification Storage Allocation Profile (/data)</h4>
+                        <div class="chart-container flex-grow">
+                            <canvas id="memChart"></canvas>
+                        </div>
+                        <p class="text-[10px] text-slate-500 mt-2 text-center italic">Monitors storage ratios between download caches and your active media index.</p>
+                    </div>
+
+                    <div class="terminal-panel p-4 rounded-lg flex flex-col">
+                        <h4 class="text-xs font-bold text-slate-300 mb-3 text-center uppercase tracking-wider">Active Memory Footprint Overheads</h4>
+                        <div class="chart-container flex-grow">
+                            <canvas id="netChart"></canvas>
+                        </div>
+                        <p class="text-[10px] text-slate-500 mt-2 text-center italic">Visualizes container memory usage distributions under system state operations.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="tab-timeline" class="tab-content hidden flex flex-col gap-6">
+                <div class="terminal-panel p-5 rounded-lg">
+                    <h3 class="text-xs font-bold text-slate-300 tracking-wider mb-2 uppercase border-b border-[#212830] pb-2">Estimated Deployment Execution Roadmap</h3>
+                    <p class="text-xs text-slate-400 leading-relaxed">
+                        This workflow sequence tracking map breaks down deployment phases across a simulated configuration schedule to ensure optimal system mapping validation.
+                    </p>
+                </div>
+
+                <div class="terminal-panel p-5 rounded-lg">
+                    <div class="chart-container w-full h-[320px]">
+                        <canvas id="ganttChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="terminal-panel p-5 rounded-lg">
+                    <h4 class="text-xs font-bold text-slate-300 mb-4 uppercase">CRITICAL SERVICE POST-INSTALL CHECKS</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-slate-400">
+                        <div class="border border-slate-800 p-3 rounded">
+                            <span class="font-mono text-sky-400">CHECK_01</span> <span class="font-semibold text-slate-200">Atomic Hardlink Moves</span><br>
+                            <span class="text-slate-400 block mt-1">Verify that torrent data folder allocations share a matching root folder mount point with Radarr/Sonarr to prevent disk I/O performance bottlenecks.</span>
+                        </div>
+                        <div class="border border-slate-800 p-3 rounded">
+                            <span class="font-mono text-sky-400">CHECK_02</span> <span class="font-semibold text-slate-200">Prowlarr Integration Sync</span><br>
+                            <span class="text-slate-400 block mt-1">Navigate to Settings -> Applications inside Prowlarr to push tracker definitions and API endpoints to your indexers simultaneously.</span>
+                        </div>
+                        <div class="border border-slate-800 p-3 rounded">
+                            <span class="font-mono text-sky-400">CHECK_03</span> <span class="font-semibold text-slate-200">UID/GID Permissions Alignment</span><br>
+                            <span class="text-slate-400 block mt-1">Ensure the user variables (PUID=1000) defined within your Docker configuration match the owners of your host system's data folders.</span>
+                        </div>
+                        <div class="border border-slate-800 p-3 rounded">
+                            <span class="font-mono text-sky-400">CHECK_04</span> <span class="font-semibold text-slate-200">Proxmox Backup Stratums</span><br>
+                            <span class="text-slate-400 block mt-1">Schedule daily, automated Proxmox snapshots targeting your container configuration folder volumes (/opt/arr-stack) to ensure swift disaster recovery.</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+    </main>
+
+    <footer class="w-full max-w-7xl mx-auto mt-6 text-center border-t border-[#212830] pt-4 text-[10px] text-slate-500 font-mono flex flex-col md:flex-row justify-between items-center gap-2">
+        <p>&copy; 2026 Home Infrastructure Orchestration Laboratory Manual Framework</p>
+        <p class="text-slate-400">VERIFIED SPECIFICATION PIPELINE COMPLETE &bull; RETRO DESIGN BY EMULATION TEAM</p>
+    </footer>
+
+    <script>
+        // System State parameters
+        let currentSystemState = 'secure'; // Secure Base vs Stack Orchestrated
+        let activeTab = 'dashboard';
+        let charts = {};
+
+        // Remapped Node Database
+        const topology = {
+            prowlarr: {
+                title: "TELEMETRY AGENT: PROWLARR INDEXER MONITOR",
+                desc: "Acts as your unified provider index manager. Prowlarr centralizes Usenet and Torrent tracker settings, pushing index definitions to Radarr and Sonarr automatically using internal API token parameters."
+            },
+            coordinators: {
+                title: "ORCHESTRATORS: RADARR AND SONARR ENGINES",
+                desc: "These discovery agents scan media calendars, evaluate resolution profiles, monitor automated RSS feeds, and verify release names to calculate the optimal download path."
+            },
+            downloader: {
+                title: "FETCH MECHANISM: qBITTORRENT PIPELINE",
+                desc: "The download processor. It handles magnet link tasks via public web connections, isolates active package downloads, and stores files directly within your persistent storage data block."
+            },
+            storage: {
+                title: "DISK HIERARCHY: UNIFIED /data STRUCTURAL DISK MAP",
+                desc: "Crucial atomic layout requirement. Must be organized as /data/torrents and /data/media to ensure instant, zero-copy hardlinks are possible across standard application bridges."
+            }
+        };
+
+        // Simulated Command Outputs remapped to System State
+        const commandOutputs = {
+            secure: {
+                pstree: "CONTAINER ID   IMAGE         COMMAND    CREATED   STATUS    PORTS\n=================================================================\n(No container runtimes active inside the environment yet. Toggle the Active Stack state above!)",
+                maps: "/data\n├── torrents (Empty)\n└── media\n    ├── movies (Empty)\n    └── tv (Empty)\n\n3 directories, 0 files",
+                pcap: "NAME          CPU %     MEM USAGE / LIMIT     NET I/O     BLOCK I/O\n===================================================================\n(Docker system engine idle...)"
+            },
+            compromised: {
+                pstree: "CONTAINER ID   IMAGE                        STATUS          PORTS\n=========================================================================\nd83b2762a121   linuxserver/prowlarr:latest   Up 4 minutes    0.0.0.0:9696->9696/tcp\nc91a823b1822   linuxserver/radarr:latest     Up 4 minutes    0.0.0.0:7878->7878/tcp\na2712918bb15   linuxserver/sonarr:latest     Up 4 minutes    0.0.0.0:8989->8989/tcp\nf19c28374a09   linuxserver/qbittorrent:latestUp 4 minutes    0.0.0.0:8080->8080/tcp",
+                maps: "/data\n├── torrents\n│   ├── movie_download_cache.mkv\n│   └── tv_seed_pool/\n└── media\n    ├── movies\n    │   └── Movie_Asset_Valid (2024).mkv [HARDLINKED]\n    └── tv\n\n5 directories, 2 files",
+                pcap: "NAME            CPU %     MEM USAGE / LIMIT     NET I/O       BLOCK I/O\nprowlarr        0.12%     68.4MiB / 2.0GiB      14KB / 8KB    0B / 0B\nradarr          0.45%     142.1MiB / 2.0GiB     45KB / 112KB  12MB / 0B\nsonarr          0.38%     156.5MiB / 2.0GiB     32KB / 90KB   8MB / 0B\nqbittorrent     2.10%     84.2MiB / 2.0GiB      4.2MB / 120KB 48MB / 22MB"
+            }
+        };
+
+        // Live Clock script
+        function updateClock() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('en-GB', { hour12: false });
+            document.getElementById('live-clock').innerText = timeString;
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // Navigation Tabs Toggle
+        function switchTab(tabId) {
+            document.querySelectorAll('#nav-tabs button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.add('hidden');
+            });
+            document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+
+            activeTab = tabId;
+
+            if (tabId === 'forensics') {
+                setTimeout(initializeForensicsCharts, 50);
+            } else if (tabId === 'timeline') {
+                setTimeout(initializeTimelineChart, 50);
+            }
+        }
+
+        // Master State switcher logic
+        function toggleSystemState(state) {
+            currentSystemState = state;
+            
+            const btnSec = document.getElementById('btn-state-secure');
+            const btnComp = document.getElementById('btn-state-compromised');
+
+            if (state === 'secure') {
+                btnSec.className = "px-5 py-2 text-xs font-bold rounded border uppercase tracking-wider transition-all duration-200 state-active-secure";
+                btnComp.className = "px-5 py-2 text-xs font-bold rounded border uppercase tracking-wider transition-all duration-200 text-slate-500 border-slate-800";
+                
+                document.getElementById('metric-integrity').innerText = "ACTIVE";
+                document.getElementById('metric-integrity').className = "text-xl font-bold tracking-wider mt-1 font-mono uppercase text-[#7ee787] success-glow";
+                document.getElementById('desc-integrity').innerText = "Docker CE daemon running smoothly on host socket endpoints.";
+
+                document.getElementById('metric-resolver').innerText = "EMPTY_BASE";
+                document.getElementById('metric-resolver').className = "text-xl font-bold tracking-wider mt-1 font-mono uppercase text-amber-400";
+                document.getElementById('desc-resolver').innerText = "Pre-requisite files installed. Awaiting runtime app definitions.";
+
+                document.getElementById('metric-shells').innerText = "0 CONTAINERS";
+                document.getElementById('metric-shells').className = "text-xl font-bold tracking-wider mt-1 font-mono uppercase text-slate-400";
+                document.getElementById('desc-shells').innerText = "No Arr service modules running within active network bridges.";
+
+                document.getElementById('integrity-status-paragraph').innerText = "Docker baseline verified. Choose an administrative deployment strategy using the tabs above.";
+                document.getElementById('integrity-status-paragraph').className = "text-slate-400 mt-1 leading-normal";
+            } else {
+                btnComp.className = "px-5 py-2 text-xs font-bold rounded border uppercase tracking-wider transition-all duration-200 state-active-compromised";
+                btnSec.className = "px-5 py-2 text-xs font-bold rounded border uppercase tracking-wider transition-all duration-200 text-slate-500 border-slate-800";
+
+                document.getElementById('metric-integrity').innerText = "ACTIVE";
+                document.getElementById('metric-integrity').className = "text-xl font-bold tracking-wider mt-1 font-mono uppercase text-[#7ee787] success-glow";
+
+                document.getElementById('metric-resolver').innerText = "PROVISIONED";
+                document.getElementById('metric-resolver').className = "text-xl font-bold tracking-wider mt-1 font-mono uppercase text-sky-400 accent-glow";
+                document.getElementById('desc-resolver').innerText = "Arr ecosystem completely linked. APIs validated across internal routes.";
+
+                document.getElementById('metric-shells').innerText = "4 RUNNING";
+                document.getElementById('metric-shells').className = "text-xl font-bold tracking-wider mt-1 font-mono uppercase text-[#7ee787] success-glow";
+                document.getElementById('desc-shells').innerText = "All targeted download agent dependencies reporting healthy execution loops.";
+
+                document.getElementById('integrity-status-paragraph').innerText = "SUCCESS: Live telemetry reporting all 4 micro-services operational. Inter-container configurations working correctly.";
+                document.getElementById('integrity-status-paragraph').className = "text-[#7ee787] mt-1 leading-normal font-bold success-glow";
+            }
+
+            if (activeTab === 'forensics') {
+                document.getElementById('console-status-dot').className = "w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse";
+                document.getElementById('diagnostic-stdout').innerHTML = "<span class='text-amber-400 animate-pulse'>[STACK STATE ALTERED] Rerun diagnostic command blocks above to refresh visual logs...</span>";
+                initializeForensicsCharts();
+            }
+        }
+
+        // Node selector logic (VLAN laboratory map)
+        function selectNode(nodeKey) {
+            const data = topology[nodeKey];
+            const panel = document.getElementById('topology-info-box');
+            panel.innerHTML = `
+                <div class="h-full flex flex-col justify-center animate-fadeIn">
+                    <h4 class="text-xs font-bold text-sky-400 uppercase tracking-widest border-b border-slate-800 pb-2 mb-3">${data.title}</h4>
+                    <p class="text-xs text-slate-300 leading-relaxed mb-4">${data.desc}</p>
+                    <div class="text-[10px] font-mono text-slate-500 mt-auto flex justify-between">
+                        <span>VOLUME_TARGET: /data</span>
+                        <span>PERMS: UID=1000</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Terminal Diagnostic Console Executer
+        function runDiagnostic(commandType) {
+            const terminal = document.getElementById('diagnostic-stdout');
+            document.getElementById('console-status-dot').className = "w-2.5 h-2.5 rounded-full bg-sky-400 animate-pulse";
+            terminal.innerHTML = `<span class='text-sky-400 animate-pulse'>Executing terminal query request... Please wait...</span>`;
+            
+            setTimeout(() => {
+                const lines = commandOutputs[currentSystemState][commandType].split('\n');
+                let outputHtml = '';
+                lines.forEach((line, i) => {
+                    outputHtml += `<div class="log-line" style="animation-delay: ${i * 40}ms">${line}</div>`;
+                });
+                terminal.innerHTML = outputHtml;
+                document.getElementById('console-status-dot').className = "w-2.5 h-2.5 rounded-full bg-[#7ee787] animate-pulse";
+            }, 300);
+        }
+
+        // Dynamic Chart Initialization - Forensics Tab
+        function initializeForensicsCharts() {
+            if (charts.mem) charts.mem.destroy();
+            if (charts.net) charts.net.destroy();
+
+            // Storage Data Model Adjustments
+            const pageData = [65, 35]; 
+            // RAM Overhead tracking simulation models
+            const ramOverheadData = currentSystemState === 'secure' ? [12, 0, 0, 0] : [68, 142, 156, 84];
+
+            // Memory Allocation Chart (Doughnut)
+            const ctxMem = document.getElementById('memChart').getContext('2d');
+            charts.mem = new Chart(ctxMem, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Media Storage Directory (/data/media)', 'Download Scratchpad Pool (/data/torrents)'],
+                    datasets: [{
+                        data: pageData,
+                        backgroundColor: ['#58a6ff', '#ff7b72'],
+                        borderColor: '#11161d',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                color: '#c9d1d9',
+                                font: { family: 'Consolas', size: 9 }
+                            }
+                        }
+                    },
+                    cutout: '70%'
+                }
+            });
+
+            // Network Packet Chart (Bar)
+            const ctxNet = document.getElementById('netChart').getContext('2d');
+            charts.net = new Chart(ctxNet, {
+                type: 'bar',
+                data: {
+                    labels: ['Prowlarr', 'Radarr', 'Sonarr', 'qBittorrent'],
+                    datasets: [{
+                        label: 'Memory Draw (Megabytes)',
+                        data: ramOverheadData,
+                        backgroundColor: '#7ee787',
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 200,
+                            grid: { color: '#212830' },
+                            ticks: { color: '#8b949e', font: { family: 'Consolas', size: 9 } }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#8b949e', font: { family: 'Consolas', size: 10 } }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
+        // Dynamic Chart Initialization - Timeline Tab (Roadmap Gantt style)
+        function initializeTimelineChart() {
+            if (charts.gantt) charts.gantt.destroy();
+
+            const ctx = document.getElementById('ganttChart').getContext('2d');
+            charts.gantt = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: [
+                        'Phase 1: Proxmox Nesting Config',
+                        'Phase 2: File Structure Creation',
+                        'Phase 3: Stack Blueprint Run',
+                        'Phase 4: API Access Hardening'
+                    ],
+                    datasets: [{
+                        label: 'Task Sequence Order (Steps)',
+                        data: [
+                            [1, 3],
+                            [3, 6],
+                            [6, 11],
+                            [10, 16]
+                        ],
+                        backgroundColor: [
+                            'rgba(88, 166, 255, 0.45)', 
+                            'rgba(255, 123, 114, 0.45)', 
+                            'rgba(126, 231, 135, 0.45)', 
+                            'rgba(242, 233, 75, 0.45)'    
+                        ],
+                        borderColor: [
+                            '#58a6ff',
+                            '#ff7b72',
+                            '#7ee787',
+                            '#f2e94b'
+                        ],
+                        borderWidth: 1.5,
+                        borderRadius: 4,
+                        borderSkipped: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y', // Turns Gantt chart horizontal
+                    scales: {
+                        x: {
+                            min: 1,
+                            max: 16,
+                            grid: { color: '#212830' },
+                            ticks: {
+                                stepSize: 1,
+                                color: '#8b949e',
+                                font: { family: 'Consolas', size: 10 }
+                            },
+                            title: {
+                                display: true,
+                                text: 'Deployment Process Order (Step Milestones)',
+                                color: '#c9d1d9',
+                                font: { family: 'Consolas', size: 11 }
+                            }
+                        },
+                        y: {
+                            grid: { display: false },
+                            ticks: {
+                                color: '#c9d1d9',
+                                font: { family: 'Consolas', size: 10 }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
+        // Initialize App components on Window load
+        window.onload = function() {
+            selectNode('prowlarr');
+        }
+    </script>
+</body>
+</html>

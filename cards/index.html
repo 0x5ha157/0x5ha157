@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Identity: Secure Terminal</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --card-bg: #161b22;
+            --text-color: #c9d1d9;
+            --accent-color: #58a6ff; 
+            --cmd-color: #7ee787;    
+            --dim-color: #8b949e;
+            --border-color: #30363d;
+            --font-stack: 'Consolas', 'Monaco', 'Courier New', monospace;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-stack);
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column; 
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        #capture-area {
+            padding: 20px;
+            background-color: var(--bg-color);
+        }
+
+        .card {
+            width: 550px;
+            height: 320px;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .card-header {
+            background: #090c10;
+            padding: 8px 15px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.75rem;
+            color: var(--dim-color);
+            flex-shrink: 0;
+        }
+
+        .status-dot { width: 8px; height: 8px; background: var(--cmd-color); border-radius: 50%; display: inline-block; margin-right: 5px; box-shadow: 0 0 5px var(--cmd-color); }
+        .card-body { display: flex; height: 100%; padding: 20px; gap: 20px; overflow: hidden; }
+
+        .terminal-section {
+            flex: 1.5;
+            display: flex;
+            flex-direction: column;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            height: 100%;
+            min-width: 0;
+        }
+
+        .terminal-content {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .prompt-user { color: var(--cmd-color); font-weight: bold; }
+        .prompt-path { color: var(--accent-color); }
+        
+        .info-block {
+            color: var(--text-color);
+            white-space: pre-wrap;
+            border-left: 2px solid var(--border-color);
+            padding-left: 10px;
+            margin-top: 5px;
+            overflow-wrap: break-word;
+        }
+
+        .info-label { color: var(--dim-color); display: inline-block; width: 60px; } 
+        .info-val { color: #fff; font-weight: bold; }
+
+        .visual-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            min-width: 120px;
+        }
+
+        #qrcode {
+            background: #fff;
+            padding: 5px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            opacity: 0.9;
+        }
+        #qrcode img { display: block; pointer-events: none; width: 100px !important; height: 100px !important; } 
+
+        .sga-box {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 8px;
+            width: 100%;
+            text-align: center;
+            font-size: 0.8rem;
+            height: 40px; 
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #b388ff; 
+            margin-bottom: 10px;
+            overflow: hidden;
+            white-space: nowrap;
+            box-sizing: border-box;
+        }
+
+        .pgp-container { width: 100%; font-size: 0.7rem; text-align: center; cursor: pointer; }
+        .pgp-label { color: var(--dim-color); font-size: 0.6rem; margin-bottom: 2px; }
+        .pgp-key { 
+            color: var(--accent-color); 
+            border: 1px dashed var(--border-color);
+            padding: 4px;
+            border-radius: 4px;
+            font-family: monospace;
+            word-break: break-all;
+        }
+
+        .ip-box {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 5px 10px;
+            font-size: 0.75rem;
+            color: var(--dim-color);
+            font-family: var(--font-stack);
+            display: inline-flex; 
+            align-items: baseline;
+            gap: 8px;
+            margin-top: auto; 
+            align-self: flex-start;
+            white-space: nowrap;
+        }
+        #ip-val { color: var(--cmd-color); font-weight: bold; }
+
+        @keyframes blink { 50% { opacity: 0; } }
+        .cursor { display: inline-block; width: 8px; height: 1em; background: var(--cmd-color); animation: blink 1s step-end infinite; vertical-align: middle; }
+
+        #boot-screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--bg-color); z-index: 999;
+            display: flex; align-items: center; justify-content: center;
+            flex-direction: column; font-size: 1.2rem;
+            color: var(--cmd-color);
+        }
+
+        /* --- BUTTONS & MODAL STYLES --- */
+        .action-bar {
+            margin-top: 20px;
+            display: flex;
+            gap: 15px;
+        }
+
+        .btn {
+            background: var(--card-bg);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 12px 25px;
+            font-family: var(--font-stack);
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 6px;
+            text-transform: uppercase;
+            transition: 0.3s;
+        }
+        .btn:hover { border-color: var(--accent-color); color: var(--accent-color); }
+        
+        .adopt-btn {
+            background: var(--cmd-color);
+            color: #0d1117;
+            border: none;
+        }
+        .adopt-btn:hover { opacity: 0.8; transform: scale(1.05); color: #0d1117; border: none; }
+
+        /* Modal styling */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); z-index: 2000;
+            display: none; justify-content: center; align-items: center;
+        }
+        .modal-box {
+            background: #0d1117; border: 1px solid var(--accent-color);
+            padding: 25px; width: 350px;
+            box-shadow: 0 0 30px rgba(88, 166, 255, 0.15);
+            border-radius: 8px;
+        }
+        .modal-title { color: var(--accent-color); margin-bottom: 20px; text-align: center; font-weight: bold; }
+        .input-group { margin-bottom: 15px; }
+        .input-group label { display: block; color: var(--dim-color); font-size: 0.8rem; margin-bottom: 5px; }
+        .input-field {
+            width: 100%; background: #161b22; border: 1px solid var(--border-color);
+            color: #fff; padding: 8px; font-family: var(--font-stack);
+            box-sizing: border-box; outline: none;
+        }
+        .input-field:focus { border-color: var(--cmd-color); }
+        .modal-btns { display: flex; justify-content: space-between; margin-top: 20px; }
+        .terminate-msg { color: #ff7b72; font-weight: bold; display: none; margin-top: 20px; border: 1px solid #ff7b72; padding: 10px;}
+
+        @media (max-width: 650px) {
+            body { padding: 15px; overflow-y: auto; height: auto; min-height: 100vh; }
+            .card { width: 100%; max-width: 450px; height: auto; margin: 20px 0; }
+            .card-body { flex-direction: column; gap: 25px; padding: 20px; }
+            .terminal-section { border-bottom: 1px dashed var(--border-color); padding-bottom: 20px; width: 100%; }
+            .visual-section { width: 100%; justify-content: center; gap: 10px; }
+            .ip-box { width: 100%; justify-content: center; box-sizing: border-box; margin-top: 15px; }
+            .action-bar { flex-direction: column; width: 100%; max-width: 450px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="boot-screen"><div id="boot-text">INITIALIZING SECURE HANDSHAKE...</div></div>
+
+    <div class="modal-overlay" id="customModal">
+        <div class="modal-box">
+            <div class="modal-title">>> OVERRIDE IDENTITY</div>
+            <div class="input-group">
+                <label>NAME</label>
+                <input type="text" class="input-field" id="new-name" placeholder="Enter Full Name...">
+            </div>
+            <div class="input-group">
+                <label>ROLE</label>
+                <input type="text" class="input-field" id="new-role" placeholder="e.g. Developer, Hacker...">
+            </div>
+            <div class="input-group">
+                <label>EMAIL</label>
+                <input type="text" class="input-field" id="new-email" placeholder="email@domain.com">
+            </div>
+            <div class="input-group">
+                <label>TEL</label>
+                <input type="text" class="input-field" id="new-phone" placeholder="+00 000 000 000">
+            </div>
+            <div class="input-group">
+                <label>CERTS</label>
+                <input type="text" class="input-field" id="new-certs" placeholder="e.g. CEH | OSCP | CCNA">
+            </div>
+            <div class="modal-btns">
+                <button class="btn" onclick="closeModal()" style="border-color: #ff7b72; color: #ff7b72;">CANCEL</button>
+                <button class="btn" onclick="applyCustomData()" style="background: var(--accent-color); color: #000; border: none;">GENERATE</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="capture-area">
+        <div class="card">
+            <div class="card-header">
+                <div><span class="status-dot"></span>SECURE_CONNECTION</div>
+                <div id="header-id">ID: LOADING...</div>
+            </div>
+
+            <div class="card-body">
+                <div class="terminal-section">
+                    <div class="terminal-content">
+                        <div style="margin-bottom: 10px;">
+                            <span class="prompt-user">root@0x5ha157</span>:<span class="prompt-path">~</span># cat identity.vcf
+                        </div>
+                        <div class="info-block" id="typewriter"></div>
+                        <div style="margin-top: 15px;">
+                            <span class="prompt-user">root@0x5ha157</span>:<span class="prompt-path">~</span># <span class="cursor"></span>
+                        </div>
+                    </div>
+                    <div class="ip-box">
+                        <span>CLIENT_IP ::</span>
+                        <span id="ip-val">FETCHING...</span>
+                    </div>
+                </div>
+
+                <div class="visual-section">
+                    <div id="qrcode"></div>
+                    <div class="sga-box" id="sga-display"></div>
+                    <div class="pgp-container" onclick="copyPGP()">
+                        <div class="pgp-label">SESSION PGP KEY (STATIC)</div>
+                        <div class="pgp-key" id="pgp-key"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="action-bar">
+        <button class="btn" onclick="openModal()">+ Create New</button>
+        <button class="btn adopt-btn" id="adoptBtn" onclick="adoptCard()">Adopt & Download Card</button>
+    </div>
+    <div class="terminate-msg" id="end-msg">SESSION IDENTITY CONSUMED. REFRESH TO RE-CONNECT.</div>
+
+    <script>
+        // --- DEFAULT CONFIGURATION ---
+        // This is the default if the page loads fresh.
+        let USER_DATA = {
+            name: "Shashwat Tripathi",
+            role: "FreeLance",
+            email: "0x5ha157@gmail.com",
+            phone: "+91 706 097 2226", 
+            certs: "CCST | Network +" 
+        };
+        const SGA_CHARS = "ᔑʖᓵ↸ᒣᒲ⎓⊣⍑╎⋮ꖎᒲリ𝙹!¡ᑫ∷ᓊℸᒲ⎓⊣"; 
+
+        // State Variables
+        let currentID = "";
+        let currentPGP = "";
+        let currentSGA = "";
+        let isProcessing = false;
+
+        window.onload = function() {
+            fetchIP(); 
+            generateStaticData(); 
+
+            setTimeout(() => { document.getElementById('boot-text').innerText = "DECRYPTING IDENTITY..."; }, 800);
+            setTimeout(() => {
+                document.getElementById('boot-screen').style.display = 'none';
+                typeWriterEffect();
+            }, 1800);
+        };
+
+        // 1. Generate Static Data 
+        function generateStaticData() {
+            // Generate ID
+            currentID = Math.random().toString(36).substring(2, 8).toUpperCase();
+            document.getElementById('header-id').innerText = "ID: " + currentID;
+
+            // Generate PGP
+            const chars = "0123456789ABCDEF";
+            let key = "0x";
+            for(let i=0; i<16; i++) {
+                key += chars[Math.floor(Math.random() * 16)];
+                if(i===3 || i===7 || i===11) key += " ";
+            }
+            currentPGP = key;
+            document.getElementById('pgp-key').innerText = currentPGP;
+
+            // Generate SGA
+            let str = "";
+            for(let i=0; i<8; i++) str += SGA_CHARS.charAt(Math.floor(Math.random() * SGA_CHARS.length));
+            currentSGA = str;
+            document.getElementById('sga-display').innerText = currentSGA;
+
+            // Generate QR
+            generateQR(`https://0x5ha157.net/cards/verify/?id=${currentID}`);
+        }
+
+        function fetchIP() {
+            fetch('https://api.ipify.org?format=json')
+                .then(response => response.json())
+                .then(data => { document.getElementById('ip-val').innerText = data.ip; })
+                .catch(() => { document.getElementById('ip-val').innerText = "HIDDEN"; });
+        }
+
+        function typeWriterEffect() {
+            const container = document.getElementById('typewriter');
+            container.innerHTML = `
+<span class="info-label">NAME:</span> <span class="info-val">${USER_DATA.name}</span>
+<span class="info-label">ROLE:</span> <span class="info-val">${USER_DATA.role}</span>
+<span class="info-label">EMAIL:</span> <span class="info-val">${USER_DATA.email}</span>
+<span class="info-label">TEL:</span> <span class="info-val">${USER_DATA.phone}</span>
+<span class="info-label">CERTS:</span> <span class="info-val">${USER_DATA.certs}</span>`;
+        }
+
+        function generateQR(text) {
+            const container = document.getElementById("qrcode");
+            container.innerHTML = "";
+            new QRCode(container, {
+                text: text, width: 100, height: 100,
+                colorDark : "#000000", colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.H
+            });
+        }
+
+        // --- UPDATED MODAL LOGIC ---
+        function openModal() {
+            // THIS CLEARS THE FIELDS TO BLANK EVERY TIME YOU OPEN IT
+            document.getElementById('new-name').value = "";
+            document.getElementById('new-role').value = "";
+            document.getElementById('new-email').value = "";
+            document.getElementById('new-phone').value = "";
+            document.getElementById('new-certs').value = "";
+            
+            document.getElementById('customModal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('customModal').style.display = 'none';
+        }
+
+        function applyCustomData() {
+            // Get values from inputs. If empty, use "---" or similar placeholder, OR keep old data.
+            // Since you asked for "Dynamic", we take exactly what is typed.
+            // If they type nothing, the card field becomes empty/blank.
+            
+            const nName = document.getElementById('new-name').value;
+            const nRole = document.getElementById('new-role').value;
+            const nEmail = document.getElementById('new-email').value;
+            const nPhone = document.getElementById('new-phone').value;
+            const nCerts = document.getElementById('new-certs').value;
+
+            // Only update if the user actually opened the modal and clicked generate.
+            // We use ' || "---" ' to ensure the layout doesn't break if they leave it empty.
+            USER_DATA.name = nName || "---";
+            USER_DATA.role = nRole || "---";
+            USER_DATA.email = nEmail || "---";
+            USER_DATA.phone = nPhone || "---";
+            USER_DATA.certs = nCerts || "---";
+
+            // Refresh ID and Visuals
+            generateStaticData();
+            typeWriterEffect();
+            closeModal();
+
+            // Resurrect adopt button if it was gone
+            const btn = document.getElementById('adoptBtn');
+            const endMsg = document.getElementById('end-msg');
+            if(btn.style.display === 'none') {
+                btn.style.display = 'block';
+                btn.innerText = "ADOPT & DOWNLOAD CARD";
+                endMsg.style.display = 'none';
+            }
+        }
+
+        // --- ADOPT LOGIC ---
+        async function adoptCard() {
+            if(isProcessing) return;
+            isProcessing = true;
+            
+            const btn = document.getElementById('adoptBtn');
+            const originalBtnText = btn.innerText;
+            btn.innerText = "CONNECTING...";
+
+            // Send whatever is currently in USER_DATA
+            const cardData = {
+                id: currentID,
+                pgp: currentPGP,
+                sga: currentSGA,
+                userData: USER_DATA, // This sends the dynamic data (Name, Role, etc)
+                timestamp: new Date().toISOString(),
+                ip: document.getElementById('ip-val').innerText
+            };
+
+            try {
+                // Step A: Send to PHP
+                const response = await fetch('save_identity.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(cardData)
+                });
+
+                // Check Response from PHP
+                if (!response.ok) {
+                    throw new Error(`Server Error: ${response.status}`);
+                }
+
+                const result = await response.json();
+                
+                if (result.status !== 'success') {
+                    throw new Error(result.message || "Unknown Server Error");
+                }
+
+                // Step B: Generate Image (Only if server save worked)
+                btn.innerText = "CAPTURING...";
+                await new Promise(r => setTimeout(r, 200));
+
+                const captureArea = document.querySelector("#capture-area");
+                
+                const canvas = await html2canvas(captureArea, {
+                    backgroundColor: "#0d1117",
+                    scale: 2, 
+                    useCORS: true 
+                });
+
+                const link = document.createElement('a');
+                link.download = `identity_${currentID}.png`;
+                link.href = canvas.toDataURL("image/png");
+                link.click();
+
+                // Step C: Success & LOCK BUTTON
+                btn.innerText = "ADOPTED!";
+                
+                setTimeout(() => { 
+                    btn.style.display = 'none'; // Remove button
+                    document.getElementById('end-msg').style.display = 'block'; // Show terminate msg
+                    isProcessing = false; 
+                }, 1000);
+
+            } catch (error) {
+                console.error("Error:", error);
+                // Show error on button
+                btn.innerText = "ERR: " + error.message.substring(0, 15);
+                setTimeout(() => {
+                    btn.innerText = originalBtnText;
+                    isProcessing = false;
+                }, 3000);
+            }
+        }
+
+        function copyPGP() {
+            const el = document.getElementById('pgp-key');
+            navigator.clipboard.writeText(el.innerText);
+            const original = el.innerText;
+            el.innerText = "COPIED TO CLIPBOARD";
+            el.style.color = "#7ee787";
+            setTimeout(() => { el.innerText = original; el.style.color = "#58a6ff"; }, 1000);
+        }
+
+        // --- SECURITY ---
+        document.addEventListener('contextmenu', e => e.preventDefault()); 
+        document.onkeydown = function(e) {
+            if (e.keyCode == 123) return false; // F12
+            if (e.ctrlKey && e.shiftKey && (e.keyCode == 73 || e.keyCode == 74 || e.keyCode == 81)) return false; 
+            if (e.ctrlKey && e.keyCode == 85) return false; // U
+            if (e.ctrlKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); return false; } // Block Ctrl+S
+        }
+    </script>
+</body>
+</html>

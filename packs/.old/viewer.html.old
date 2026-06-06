@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>root@0x5ha157:~/packs</title>
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --text-color: #c9d1d9;
+            --accent-color: #58a6ff;
+            --cmd-color: #7ee787;
+            --dim-color: #8b949e;
+            --code-bg: #161b22;
+            --font-stack: 'Consolas', 'Monaco', 'Andale Mono', monospace;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-stack);
+            margin: 0;
+            padding: 2rem;
+            overflow-x: hidden;
+        }
+
+        /* --- UI Elements --- */
+        .nav-bar { margin-bottom: 2rem; }
+        .back-btn {
+            display: inline-flex; align-items: center; padding: 8px 16px;
+            background: var(--code-bg); color: var(--accent-color);
+            text-decoration: none; border: 1px solid #30363d;
+            border-radius: 6px; font-size: 0.9rem; font-weight: bold;
+            transition: all 0.2s;
+        }
+        .back-btn:hover {
+            background: #30363d; color: white; border-color: var(--accent-color);
+            transform: translateX(-3px);
+        }
+
+        .terminal-header {
+            margin-top: 1rem; margin-bottom: 2rem;
+            border-bottom: 1px solid #30363d; padding-bottom: 1rem;
+        }
+        .prompt { color: var(--cmd-color); font-weight: bold; }
+        .path { color: var(--accent-color); }
+        .command { color: #fff; }
+
+        /* --- Auth Screen --- */
+        #auth-screen { display: flex; flex-direction: column; margin-top: 5vh; }
+        .input-line { display: flex; align-items: center; }
+        input#password-input {
+            background: transparent; border: none; color: white;
+            font-family: var(--font-stack); font-size: 1rem;
+            outline: none; margin-left: 10px; width: 50%;
+            caret-color: var(--cmd-color);
+        }
+        .access-denied { color: #ff6b6b; display: none; margin-top: 1rem; }
+        .hint { font-size: 0.8rem; color: var(--dim-color); margin-top: 2rem; opacity: 0.6; }
+
+        /* --- Gallery Grid --- */
+        #gallery-container { display: none; }
+        .folder-section { margin-bottom: 3rem; animation: fadeIn 0.5s ease-in; }
+        .folder-title {
+            font-size: 1.2rem; color: var(--accent-color);
+            border-bottom: 1px dashed #30363d; padding-bottom: 0.5rem; margin-bottom: 1rem;
+        }
+        .grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 1.5rem;
+        }
+        .img-card {
+            background: var(--code-bg); border: 1px solid #30363d;
+            border-radius: 6px; padding: 0.5rem; transition: transform 0.2s;
+            cursor: pointer;
+        }
+        .img-card:hover { transform: translateY(-5px); border-color: var(--accent-color); }
+        .img-card img {
+            width: 100%; height: 200px; object-fit: cover;
+            border-radius: 4px; display: block;
+            pointer-events: none; /* Disables drag-to-save on thumbnails */
+        }
+        .img-name {
+            font-size: 0.75rem; color: var(--dim-color); margin-top: 0.5rem;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+
+        /* --- V2 LIGHTBOX (New Features) --- */
+        #lightbox {
+            display: none; position: fixed; z-index: 1000;
+            left: 0; top: 0; width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.95);
+            backdrop-filter: blur(5px);
+            align-items: center; justify-content: center;
+            flex-direction: column;
+        }
+        
+        #lightbox-img-wrapper {
+            position: relative;
+            max-width: 90%;
+            max-height: 85%;
+        }
+
+        #lightbox-img {
+            max-width: 100%; max-height: 80vh;
+            border: 2px solid #30363d;
+            box-shadow: 0 0 20px rgba(88, 166, 255, 0.2);
+            user-select: none; /* Text selection disabled */
+        }
+
+        /* The invisible shield over the image to prevent right-click/drag */
+        #lightbox-shield {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 10;
+        }
+
+        .lb-btn {
+            position: absolute; top: 50%; transform: translateY(-50%);
+            background: rgba(255,255,255,0.1); border: none; color: white;
+            padding: 15px; cursor: pointer; font-size: 2rem; user-select: none;
+            transition: 0.2s; border-radius: 5px;
+        }
+        .lb-btn:hover { background: var(--accent-color); color: black; }
+        .prev { left: 20px; }
+        .next { right: 20px; }
+        .close {
+            position: absolute; top: 20px; right: 30px;
+            font-size: 2.5rem; color: #fff; cursor: pointer; z-index: 1001;
+        }
+        #lb-caption {
+            color: var(--dim-color); margin-top: 15px; font-family: monospace;
+        }
+
+        /* --- Cursor --- */
+        .cursor {
+            display: inline-block; width: 10px; height: 1.2em;
+            background-color: var(--cmd-color);
+            animation: blink 1s step-end infinite; vertical-align: sub;
+        }
+        @keyframes blink { 50% { opacity: 0; } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    </style>
+</head>
+<body>
+
+    <div class="nav-bar">
+        <a href="/" class="back-btn">cd .. (Dashboard)</a>
+    </div>
+
+    <div class="terminal-header">
+        <span class="prompt">root@aboutwebsite</span>:<span class="path">/var/www/html/packs</span># <span class="command">./view_gallery_v2.sh</span>
+    </div>
+
+    <div id="auth-screen">
+        <p>Protected Directory. Enter Access Key:</p>
+        <div class="input-line">
+            <span class="prompt">key:</span>
+            <input type="password" id="password-input" autofocus autocomplete="off">
+        </div>
+        <p class="access-denied" id="error-msg">ACCESS DENIED. Invalid Key.</p>
+        <p class="hint">[HINT] Security Protocol Active: Key rotates every 30s.</p>
+    </div>
+
+    <div id="gallery-container">
+        <div id="status-log" style="color: var(--dim-color); margin-bottom: 2rem; white-space: pre-wrap;"></div>
+        <div id="content-area"></div>
+        <br>
+        <div style="margin-top: 20px;">
+            <span class="prompt">root@aboutwebsite</span>:<span class="path">~/packs</span>$ <span class="cursor"></span>
+        </div>
+    </div>
+
+    <div id="lightbox">
+        <span class="close" onclick="closeLightbox()">&times;</span>
+        
+        <div id="lightbox-img-wrapper">
+            <img id="lightbox-img" src="">
+            <div id="lightbox-shield"></div>
+        </div>
+        
+        <div id="lb-caption"></div>
+        
+        <button class="lb-btn prev" onclick="changeSlide(-1)">&#10094;</button>
+        <button class="lb-btn next" onclick="changeSlide(1)">&#10095;</button>
+    </div>
+
+    <script>
+        // --- CONFIGURATION ---
+        const MASTER_KEY = "0x5ha11321"; 
+        const SCAN_DIR = "./data/";      
+        
+        // --- STATE MANAGEMENT (V2) ---
+        let GLOBAL_IMAGE_LIST = []; // Stores all images flatly for scrolling
+        let currentImageIndex = 0;
+
+        let currentOTP = "";
+        let timer = null;
+
+        // --- OTP LOGIC ---
+        function generateOTP() {
+            const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$";
+            let result = "";
+            for (let i = 0; i < 8; i++) {
+                result += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return result;
+        }
+
+        function startOTPService() {
+            rotateKey();
+            timer = setInterval(rotateKey, 30000);
+        }
+
+        function rotateKey() {
+            currentOTP = generateOTP();
+            console.clear();
+            console.log("%c [SECURE SYSTEM LOG] ", "background: #2ea043; color: #fff; font-weight: bold;");
+            console.log("%c NEW ACCESS KEY GENERATED: " + currentOTP, "color: #58a6ff; font-size: 1.2rem; font-family: monospace;");
+            console.log("%c (Valid for 30 seconds)", "color: #8b949e;");
+        }
+        startOTPService();
+
+        // --- AUTH INPUT ---
+        const passInput = document.getElementById('password-input');
+        passInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                const inputVal = passInput.value;
+                if (inputVal === MASTER_KEY || inputVal === currentOTP) {
+                    document.getElementById('auth-screen').style.display = 'none';
+                    document.getElementById('gallery-container').style.display = 'block';
+                    log("Access Granted.\n[SYSTEM] Initializing scan v2...");
+                    clearInterval(timer);
+                    initGallery();
+                } else {
+                    document.getElementById('error-msg').style.display = 'block';
+                    passInput.value = '';
+                }
+            }
+        });
+
+        function log(msg) {
+            document.getElementById('status-log').innerText += msg + "\n";
+        }
+
+        // --- SCANNING LOGIC ---
+        async function initGallery() {
+            try {
+                const response = await fetch(SCAN_DIR);
+                if (!response.ok) return log(`[ERROR] Server returned ${response.status}`);
+                
+                const text = await response.text();
+                // Prevent self-scan loop
+                if (text.includes('<title>root@0x5ha157')) return log("[ERROR] Recursion detected.");
+
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(text, 'text/html');
+                const folders = Array.from(doc.querySelectorAll('a'))
+                    .map(a => a.getAttribute('href'))
+                    .filter(href => href.endsWith('/') && href !== '/' && !href.startsWith('?') && !href.includes('Parent'));
+
+                log(`[SYSTEM] Found ${folders.length} directories. Parsing assets...`);
+
+                for (const folder of folders) {
+                    await scanFolder(folder);
+                }
+                log("[SYSTEM] Grid Generated. Viewer Ready.");
+
+            } catch (err) {
+                log("[ERROR] Connection Failed.");
+            }
+        }
+
+        async function scanFolder(folderName) {
+            try {
+                const fullPath = SCAN_DIR + folderName;
+                const res = await fetch(fullPath);
+                const text = await res.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(text, 'text/html');
+                
+                // Get Images
+                const images = Array.from(doc.querySelectorAll('a'))
+                    .map(a => a.getAttribute('href'))
+                    .filter(href => href.match(/\.(jpeg|jpg|png|gif|webp)$/i));
+
+                if (images.length > 0) {
+                    renderFolder(folderName, images, fullPath);
+                }
+            } catch (e) { console.log(e); }
+        }
+
+        function renderFolder(name, images, basePath) {
+            const container = document.getElementById('content-area');
+            const cleanName = name.replace(/\/$/, '');
+            
+            // Create Section
+            const section = document.createElement('div');
+            section.className = 'folder-section';
+            section.innerHTML = `<h2 class="folder-title">${cleanName}</h2><div class="grid"></div>`;
+            const grid = section.querySelector('.grid');
+
+            images.forEach(img => {
+                const imgUrl = basePath + img;
+                
+                // Add to Global List for Lightbox Navigation
+                // We store the index so we can look it up later
+                const globalIndex = GLOBAL_IMAGE_LIST.length;
+                GLOBAL_IMAGE_LIST.push({ url: imgUrl, name: img, folder: cleanName });
+
+                // Render Card (No <a> tag anymore)
+                grid.innerHTML += `
+                    <div class="img-card" onclick="openLightbox(${globalIndex})">
+                        <img src="${imgUrl}" loading="lazy">
+                        <div class="img-name">${img}</div>
+                    </div>
+                `;
+            });
+            container.appendChild(section);
+        }
+
+        // --- V2 LIGHTBOX LOGIC ---
+        const lightbox = document.getElementById('lightbox');
+        const lbImg = document.getElementById('lightbox-img');
+        const lbCaption = document.getElementById('lb-caption');
+
+        function openLightbox(index) {
+            currentImageIndex = index;
+            updateLightbox();
+            lightbox.style.display = "flex";
+            document.body.style.overflow = "hidden"; // Disable scroll on body
+        }
+
+        function closeLightbox() {
+            lightbox.style.display = "none";
+            document.body.style.overflow = "auto"; // Re-enable scroll
+            lbImg.src = ""; // Clear src to stop memory leaks
+        }
+
+        function changeSlide(n) {
+            currentImageIndex += n;
+            // Loop functionality
+            if (currentImageIndex >= GLOBAL_IMAGE_LIST.length) currentImageIndex = 0;
+            if (currentImageIndex < 0) currentImageIndex = GLOBAL_IMAGE_LIST.length - 1;
+            updateLightbox();
+        }
+
+        function updateLightbox() {
+            const data = GLOBAL_IMAGE_LIST[currentImageIndex];
+            lbImg.src = data.url;
+            lbCaption.innerText = `[${data.folder}] ${data.name} (${currentImageIndex + 1}/${GLOBAL_IMAGE_LIST.length})`;
+        }
+
+        // Keyboard Navigation
+        document.addEventListener('keydown', function(e) {
+            if (lightbox.style.display === "flex") {
+                if (e.key === "ArrowLeft") changeSlide(-1);
+                if (e.key === "ArrowRight") changeSlide(1);
+                if (e.key === "Escape") closeLightbox();
+            }
+        });
+
+    </script>
+    <script src="/security.js?v=2"></script>
+</body>
+</html>

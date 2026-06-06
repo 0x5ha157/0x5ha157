@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reading: 1841_c0r3_n3tw0rk.md</title>
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --text-color: #c9d1d9;
+            --accent-color: #58a6ff;
+            --cmd-color: #7ee787;
+            --dim-color: #8b949e;
+            --code-bg: #161b22;
+            --body-font: 'Consolas', 'Monaco', 'Andale Mono', monospace;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--body-font);
+            padding: 2rem;
+            max-width: 800px;
+            margin: 0 auto;
+            line-height: 1.7;
+        }
+
+        /* Header */
+        .header { border-bottom: 1px solid #30363d; padding-bottom: 1rem; margin-bottom: 2rem; }
+        .prompt { color: var(--cmd-color); font-weight: bold; }
+        .path { color: var(--accent-color); }
+        .command { color: #fff; }
+
+        /* Typography */
+        h1 { font-size: 2rem; color: #fff; margin-bottom: 0.5rem; }
+        h2 { font-size: 1.4rem; color: var(--accent-color); margin-top: 2rem; margin-bottom: 1rem; border-bottom: 1px dashed #30363d; padding-bottom: 5px; }
+        h3 { font-size: 1.1rem; color: #fff; margin-top: 1.5rem; font-weight: bold; }
+        p { margin-bottom: 1rem; }
+        
+        .meta { font-size: 0.85rem; color: var(--dim-color); margin-bottom: 2rem; }
+        .meta::before { content: "stat: "; color: var(--cmd-color); }
+
+        /* Images */
+        img { max-width: 100%; border: 1px solid #30363d; border-radius: 6px; margin: 1rem 0; }
+        .img-caption { font-size: 0.8rem; color: var(--dim-color); text-align: center; margin-top: -10px; margin-bottom: 2rem; }
+
+        /* Code Blocks */
+        pre {
+            background-color: var(--code-bg);
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 1rem;
+            overflow-x: auto;
+            margin-bottom: 1.5rem;
+            color: #d1d5da;
+        }
+        
+        code { font-family: 'Courier New', Courier, monospace; }
+        
+        /* Inline Code */
+        p code, li code, td code {
+            background-color: rgba(110, 118, 129, 0.4);
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+        }
+
+        /* Tables */
+        table { width: 100%; border-collapse: collapse; margin-bottom: 1.5rem; }
+        th { text-align: left; border-bottom: 1px solid #30363d; color: var(--accent-color); padding: 8px; }
+        td { border-bottom: 1px solid #21262d; padding: 8px; color: var(--text-color); }
+
+        /* Lists */
+        ul { list-style: none; padding-left: 1rem; margin-bottom: 1rem; }
+        li::before { content: ">"; color: var(--cmd-color); margin-right: 10px; font-weight: bold; }
+
+        /* Links */
+        a { color: var(--accent-color); text-decoration: none; border-bottom: 1px dashed var(--accent-color); }
+        a:hover { background-color: rgba(88, 166, 255, 0.1); border-bottom: 1px solid var(--accent-color); }
+
+        /* Footer Navigation */
+        .footer-nav { margin-top: 4rem; text-align: center; color: var(--dim-color); font-size: 0.9rem; }
+        .nav-link { color: var(--cmd-color); font-weight: bold; }
+        
+        /* Cursor */
+        .cursor { display: inline-block; width: 10px; height: 1.2em; background-color: var(--cmd-color); animation: blink 1s step-end infinite; vertical-align: middle; }
+        @keyframes blink { 
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <span class="prompt">root@0x5ha157</span>:<span class="path">~/blog</span>$ <span class="command">cat 1841_c0r3_n3tw0rk.md</span>
+    </div>
+
+    <article>
+        <h1>Building the Core: Cisco 1841 Complete WAN/LAN Overhaul</h1>
+        <div class="meta">
+            Topic: Infrastructure As Code | Author: 0x5ha157 | Status: Deployed
+        </div>
+
+        <p>
+            This entry documents the complete teardown and rebuild of the edge gateway using a classic Cisco 1841. This configuration strips away all unnecessary GUI interfaces, establishes a highly specific internal subnet, and securely bridges it to the ISP via an encapsulated PPPoE VLAN connection.
+        </p>
+
+        <h2>1. Global Parameters & Hardening</h2>
+        <p>
+            First, we establish the baseline. We are killing the HTTP servers to remove attack vectors, setting up Indian NTP for accurate log timestamps, configuring Quad9 for DNS, and establishing the local domain.
+        </p>
+
+<pre><code>enable
+configure terminal
+
+! Kill Web UI
+no ip http server
+no ip http secure-server
+
+! Set Domain & Passwords
+hostname EdgeRouter
+ip domain-name 0x5ha157.local
+enable secret [YOUR_SECRET]
+
+! Global DNS & Time
+ip name-server 9.9.9.9
+ntp server in.pool.ntp.org</code></pre>
+
+        <h2>2. Secure Access (SSH via Port 22280)</h2>
+        <p>
+            Default ports get scanned constantly. We are moving SSH to port <code>22280</code> and restricting access strictly to RSA public keys (password auth disabled).
+        </p>
+
+<pre><code>! Generate 2048-bit RSA Key (Hit enter when prompted)
+crypto key generate rsa modulus 2048
+
+! SSH Configuration
+ip ssh version 2
+ip ssh port 22280 rotary 1
+
+! Bind to VTY lines
+line vty 0 4
+ login local
+ transport input ssh
+ rotary 1
+ exit
+
+! Inject Ubuntu Public Key
+ip ssh pubkey-chain
+ username admin
+  key-string
+   ! Paste your id_rsa.pub string here (split into 200 char lines)
+   exit
+  exit</code></pre>
+
+        <h2>3. The External Link (WAN, VLAN 262 & PPPoE)</h2>
+        <p>
+            The ISP expects a specific MAC address and tags WAN traffic on VLAN 262. We spoof the MAC on the physical interface, create the `.262` subinterface, and build a Dialer to negotiate the PPP session.
+        </p>
+
+<pre><code>! Physical Interface & MAC Spoof
+interface FastEthernet0/0
+ description Physical WAN Link
+ mac-address 74fe.ce94.1532
+ no ip address
+ no shutdown
+ exit
+
+! VLAN 262 Subinterface
+interface FastEthernet0/0.262
+ description WAN PPPoE Link
+ encapsulation dot1Q 262
+ pppoe enable group global
+ pppoe-client dial-pool-number 1
+ no ip address
+ no shutdown
+ exit
+
+! Dialer Interface (The logical WAN IP)
+interface Dialer1
+ description PPPoE Connection to ISP
+ mtu 1492
+ ip address negotiated
+ ip nat outside
+ encapsulation ppp
+ dialer pool 1
+ dialer-group 1
+ ppp authentication chap pap callin
+ ppp chap hostname [ISP_USERNAME]
+ ppp chap password [ISP_PASSWORD]
+ ppp pap sent-username [ISP_USERNAME] password [ISP_PASSWORD]
+ ip tcp adjust-mss 1452
+ no shutdown
+ exit
+
+! Default Route to the Internet
+ip route 0.0.0.0 0.0.0.0 Dialer1</code></pre>
+
+        <h2>4. Internal Network (LAN & DHCP)</h2>
+        <p>
+            The internal network uses a strictly scoped <code>/27</code> subnet. The router acts as the gateway at <code>.1</code> and handles DHCP provisioning for the remaining 30 usable addresses.
+        </p>
+
+<pre><code>! LAN Interface setup
+interface FastEthernet0/1
+ description Internal LAN
+ ip address 10.24.103.1 255.255.255.224
+ ip nat inside
+ no shutdown
+ exit
+
+! DHCP Configuration
+ip dhcp excluded-address 10.24.103.1
+
+ip dhcp pool LAN_POOL
+ network 10.24.103.0 255.255.255.224
+ default-router 10.24.103.1
+ dns-server 9.9.9.9 10.24.103.1
+ domain-name 0x5ha157.local
+ lease 7
+ exit</code></pre>
+
+        <h2>5. Network Address Translation (NAT)</h2>
+        <p>
+            Finally, we bridge the internal and external networks. A standard Access Control List (ACL) identifies our local <code>/27</code> block (using a <code>0.0.0.31</code> wildcard mask) and overloads it onto the public IP assigned to <code>Dialer1</code>.
+        </p>
+
+<pre><code>! Define the ACL for our subnet
+access-list 1 permit 10.24.103.0 0.0.0.31
+
+! Enable NAT Overload (PAT)
+ip nat inside source list 1 interface Dialer1 overload
+
+! Write to memory to persist across reboots
+end
+write memory</code></pre>
+
+        <h2>6. Post-Deployment Checks</h2>
+        <ul>
+            <li><code>show pppoe session</code> - Verify the link layer to the ISP.</li>
+            <li><code>show ip interface brief</code> - Confirm <code>Dialer1</code> pulled a public IP.</li>
+            <li><code>show ip dhcp binding</code> - Audit assigned local IPs.</li>
+            <li><code>show ip nat translations</code> - Watch the packet rewrite flow.</li>
+        </ul>
+
+    </article>
+
+    <div class="footer-nav">
+        <span class="prompt">root@0x5ha157</span>:<span class="path">~/blog</span>$ <span class="command">cd ..</span> <span class="cursor"></span>
+        <br><br>
+        [ <a href="index.html" class="nav-link">Return to Blog Index</a> ] | [ <a href="/" class="nav-link">Return to Home</a> ]
+    </div>
+
+</body>
+</html>

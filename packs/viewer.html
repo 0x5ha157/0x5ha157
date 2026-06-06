@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>root@0x5ha157:~/packs</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --text-color: #c9d1d9;
+            --accent-color: #58a6ff;
+            --cmd-color: #7ee787;
+            --dim-color: #8b949e;
+            --code-bg: #161b22;
+            --font-stack: 'Consolas', 'Monaco', 'Andale Mono', monospace;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-stack);
+            margin: 0; padding: 2rem; overflow-x: hidden;
+        }
+
+        /* --- Header & Clock --- */
+        .header-wrapper { 
+            display: flex; justify-content: space-between; align-items: center; 
+            margin-bottom: 2rem; height: 40px; 
+        }
+        .top-info { display: flex; align-items: center; gap: 15px; }
+        
+        #clock { 
+            color: var(--cmd-color); font-weight: bold; font-size: 1.1rem; 
+            width: 100px; text-align: right; display: inline-block;
+        }
+        
+        .key-display-box {
+            background: rgba(0, 0, 0, 0.3); border: 1px solid #30363d;
+            padding: 4px 12px; border-radius: 4px; width: 140px; height: 24px;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; overflow: hidden;
+        }
+
+        #decryption-field { font-size: 0.85rem; letter-spacing: 1px; white-space: nowrap; }
+        .scrambled { color: #b388ff; }
+        .revealed { color: var(--cmd-color); font-weight: bold; text-shadow: 0 0 5px rgba(126, 231, 135, 0.4); }
+
+        .nav-bar { margin-bottom: 0; }
+        .back-btn {
+            display: inline-flex; align-items: center; padding: 8px 16px;
+            background: var(--code-bg); color: var(--accent-color);
+            text-decoration: none; border: 1px solid #30363d;
+            border-radius: 6px; font-size: 0.9rem; font-weight: bold;
+        }
+
+        .terminal-header {
+            margin-top: 1rem; margin-bottom: 2rem;
+            border-bottom: 1px solid #30363d; padding-bottom: 1rem;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .prompt { color: var(--cmd-color); font-weight: bold; }
+        .path { color: var(--accent-color); }
+
+        /* --- Auth Screen --- */
+        #auth-screen { display: flex; flex-direction: column; margin-top: 5vh; }
+        .input-line { display: flex; align-items: center; }
+        input#password-input {
+            background: transparent; border: none; color: white;
+            font-family: var(--font-stack); font-size: 1rem;
+            outline: none; margin-left: 10px; width: 50%;
+        }
+        .access-denied { color: #ff6b6b; display: none; margin-top: 1rem; }
+
+        /* --- SYSTEM LOG FRAME (SCROLLBAR HIDDEN) --- */
+        .log-container {
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            background: #0d1117;
+            margin-bottom: 2rem;
+            display: none; 
+            overflow: hidden; 
+        }
+        .log-header {
+            background: #161b22;
+            padding: 5px 10px;
+            border-bottom: 1px solid #30363d;
+            font-size: 0.75rem;
+            color: var(--dim-color);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        #status-log {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.85rem;
+            color: var(--dim-color);
+            padding: 10px;
+            height: 120px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            scrollbar-width: none; 
+            -ms-overflow-style: none;
+        }
+        #status-log::-webkit-scrollbar { display: none; }
+
+        .log-entry { margin-bottom: 2px; }
+        .log-success { color: var(--cmd-color); }
+        .log-warn { color: #d29922; }
+        .log-err { color: #ff6b6b; }
+
+        /* --- Grid & Folders --- */
+        #gallery-container { display: none; }
+        .folder-section { margin-bottom: 1rem; margin-left: 25px; border-left: 1px solid #30363d; padding-left: 15px; }
+        #content-area > .folder-section { margin-left: 0; border-left: none; padding-left: 0; }
+        .collapsed > .grid, .collapsed > .folder-section { display: none !important; }
+        
+        .folder-header { 
+            display: flex; justify-content: space-between; align-items: center; 
+            border-bottom: 1px dashed #30363d; padding-bottom: 0.5rem; margin-bottom: 1rem;
+            cursor: pointer;
+        }
+        .folder-title { font-size: 1.1rem; color: var(--accent-color); margin: 0; }
+        .toggle-icon { font-family: monospace; margin-right: 10px; color: var(--dim-color); }
+        .collapsed .toggle-icon::before { content: "[+]"; }
+        .expanded .toggle-icon::before { content: "[-]"; }
+
+        .grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 1.5rem; margin-top: 1rem;
+        }
+        .file-card {
+            background: var(--code-bg); border: 1px solid #30363d;
+            border-radius: 6px; padding: 0.5rem; height: 260px;
+            display: flex; flex-direction: column; cursor: pointer;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+        .file-card:hover { transform: translateY(-3px); border-color: var(--accent-color); }
+        .thumb-area {
+            width: 100%; height: 180px; display: flex; align-items: center; 
+            justify-content: center; background: rgba(0,0,0,0.2); overflow: hidden;
+        }
+        .thumb-area img { width: 100%; height: 100%; object-fit: cover; }
+        .file-name { font-size: 0.75rem; color: var(--dim-color); text-align: center; margin-top: 10px; }
+
+        /* --- LIGHTBOX --- */
+        #lightbox {
+            display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%;
+            background-color: rgba(13, 17, 23, 0.95);
+            align-items: center; justify-content: center;
+            flex-direction: column;
+        }
+        
+        .viewer-box {
+            position: relative;
+            background: #000;
+            border: 1px solid #30363d;
+            box-shadow: 0 0 30px rgba(0,0,0,0.8);
+            border-radius: 6px;
+            padding: 5px;
+            max-width: 90%;
+            max-height: 85vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .viewer-element { display: none; width: 100%; height: 100%; max-width: 80vw; max-height: 80vh; object-fit: contain; }
+        
+        /* Iframe needs specific sizing to look good for PDF/Text */
+        iframe.viewer-element { width: 80vw; height: 80vh; border: none; background: #fff; }
+
+        .close { 
+            position: absolute; top: 20px; right: 30px; 
+            font-size: 3rem; color: #fff; cursor: pointer; z-index: 1001; opacity: 0.7;
+        }
+        .close:hover { opacity: 1; color: var(--accent-color); }
+
+        .nav-btn {
+            position: absolute; top: 50%; transform: translateY(-50%);
+            font-size: 3rem; color: white; cursor: pointer;
+            padding: 20px; user-select: none; opacity: 0.5; transition: opacity 0.2s; z-index: 1002;
+        }
+        .nav-btn:hover { opacity: 1; color: var(--accent-color); }
+        .prev-btn { left: 20px; }
+        .next-btn { right: 20px; }
+        
+        #lb-caption {
+            margin-top: 15px; color: var(--text-color); font-family: var(--font-stack);
+            background: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 4px;
+        }
+        
+        /* Error/Download Message Styling */
+        #lb-msg {
+            display: none; text-align: center; padding: 3rem; color: var(--text-color);
+        }
+        .dl-btn {
+            display: inline-block; margin-top: 1.5rem; padding: 10px 20px;
+            background: #238636; color: white; text-decoration: none;
+            border-radius: 6px; font-weight: bold; border: 1px solid rgba(255,255,255,0.1);
+            transition: background 0.2s;
+        }
+        .dl-btn:hover { background: #2ea043; }
+
+        @keyframes blink { 50% { opacity: 0; } }
+        .cursor { display: inline-block; width: 10px; height: 1.2em; background: var(--cmd-color); animation: blink 1s step-end infinite; }
+    </style>
+</head>
+<body>
+
+    <div class="header-wrapper">
+        <div class="nav-bar">
+            <a href="/" class="back-btn">cd .. (Dashboard)</a>
+        </div>
+        <div class="top-info">
+            <div class="key-display-box" onclick="copyToClipboard()">
+                <span id="decryption-field" class="scrambled">INITIALIZING...</span>
+            </div>
+            <div id="clock">00:00:00</div>
+        </div>
+    </div>
+
+    <div class="terminal-header">
+        <div><span class="prompt">root@0x5ha157</span>:<span class="path">~/packs</span># <span style="color:#fff">./UniversalViewer_v13.sh</span></div>
+        <button id="collapse-all-btn" style="background:transparent; border:1px solid var(--dim-color); color:var(--dim-color); padding:4px 12px; cursor:pointer;" onclick="toggleAllFolders()">expand_all.sh</button>
+    </div>
+
+    <div id="auth-screen">
+        <p>Protected Directory. Enter Access Key:</p>
+        <div class="input-line">
+            <span class="prompt">key:</span>
+            <input type="password" id="password-input" autofocus autocomplete="off">
+        </div>
+        <p class="access-denied" id="error-msg">ACCESS DENIED. Key Expired or Invalid.</p>
+    </div>
+
+    <div id="gallery-container">
+        <div class="log-container" id="log-wrapper">
+            <div class="log-header">System Operations Log (PID: 1337)</div>
+            <div id="status-log"></div>
+        </div>
+
+        <div id="content-area"></div>
+        <div style="margin-top: 20px;">
+            <span class="prompt">root@0x5ha157</span>:<span class="path">~/packs</span>$ <span class="cursor"></span>
+        </div>
+    </div>
+
+    <div id="lightbox">
+        <span class="close" onclick="closeLightbox()">&times;</span>
+        <div class="nav-btn prev-btn" onclick="changeFile(-1)">&#10094;</div>
+        <div class="nav-btn next-btn" onclick="changeFile(1)">&#10095;</div>
+
+        <div class="viewer-box">
+            <img id="lb-img" class="viewer-element">
+            
+            <video id="lb-video" class="viewer-element" controls></video>
+            
+            <iframe id="lb-frame" class="viewer-element"></iframe>
+            
+            <div id="lb-msg"></div>
+        </div>
+        
+        <div id="lb-caption">filename.ext</div>
+    </div>
+
+    <script>
+        // --- CONFIG ---
+        const MASTER_KEY = "0x5ha11321"; 
+        const SCAN_DIR = "./data/";
+        const SGA_CHARS = "ᔑʖᓵ↸ᒣᒲ⎓⊣⍑╎⋮ꖎᒲリ𝙹!¡ᑫ∷ᓊℸᒲ⎓⊣";
+        
+        // --- FILE TYPES ---
+        const EXT_IMG = ['jpg','jpeg','png','gif','webp','svg','bmp','ico'];
+        const EXT_VID = ['mp4','webm','ogg','mov','mkv'];
+        const EXT_DOC = ['pdf','txt','html','htm','xml','json','log','md','css','js','php','py','sh'];
+
+        // --- STATE ---
+        let generatedKey = "";
+        let lastCycleIndex = -1;
+        let GLOBAL_FILE_LIST = []; 
+        let FOLDER_STRUCTURE = {};
+        let currentFileIndex = 0;
+
+        // --- KEY SYSTEM ---
+        function generateOTP() {
+            const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; 
+            let result = "";
+            for (let i = 0; i < 8; i++) {
+                result += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            generatedKey = result;
+            console.warn(`⚠️ [SYSTEM ALERT] New Access Key Generated: ${generatedKey}`);
+        }
+
+        function updateSystemState() {
+            const now = new Date();
+            const totalSeconds = Math.floor(now.getTime() / 1000);
+            document.getElementById('clock').innerText = now.toTimeString().split(' ')[0];
+
+            const currentCycleIndex = Math.floor(totalSeconds / 30);
+            if (currentCycleIndex !== lastCycleIndex) {
+                generateOTP();
+                lastCycleIndex = currentCycleIndex;
+            }
+
+            const cyclePos = now.getSeconds() % 30;
+            const keyEl = document.getElementById('decryption-field');
+            if (cyclePos < 20) {
+                let r = "";
+                for(let i=0; i<8; i++) r += SGA_CHARS.charAt(Math.floor(Math.random()*SGA_CHARS.length));
+                keyEl.innerText = r; keyEl.className = "scrambled";
+            } else {
+                keyEl.innerText = generatedKey; keyEl.className = "revealed";
+            }
+        }
+        setInterval(updateSystemState, 100);
+
+        function copyToClipboard() {
+            const keyEl = document.getElementById('decryption-field');
+            if (keyEl.className === "revealed") {
+                navigator.clipboard.writeText(keyEl.innerText);
+                const org = keyEl.innerText; keyEl.innerText = "COPIED!";
+                setTimeout(()=>keyEl.innerText=org, 1000);
+            }
+        }
+
+        // --- LOGGER ---
+        function sysLog(msg, type="info") {
+            const logEl = document.getElementById('status-log');
+            const line = document.createElement('div');
+            line.className = 'log-entry';
+            let prefix = type === 'success' ? "[OK]" : type === 'warn' ? "[WARN]" : type === 'scan' ? "[SCAN]" : type === 'err' ? "[ERR]" : "[INFO]";
+            if(type === 'success') line.className += " log-success";
+            if(type === 'warn') line.className += " log-warn";
+            if(type === 'err') line.className += " log-err";
+            line.innerText = `${prefix} ${msg}`;
+            logEl.appendChild(line);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        // --- AUTH ---
+        document.getElementById('password-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                if (e.target.value === MASTER_KEY || e.target.value === generatedKey) {
+                    document.getElementById('auth-screen').style.display = 'none';
+                    document.getElementById('gallery-container').style.display = 'block';
+                    document.getElementById('log-wrapper').style.display = 'block';
+                    initGallery();
+                } else {
+                    document.getElementById('error-msg').style.display = 'block';
+                    e.target.value = '';
+                }
+            }
+        });
+
+        // --- SCANNER ---
+        async function initGallery() {
+            sysLog("System Initialized. Starting Deep Scan...", "scan");
+            await deepScan(SCAN_DIR);
+            sysLog(`Scan Complete. Total Files Indexed: ${GLOBAL_FILE_LIST.length}`, "success");
+            renderTree();
+        }
+
+        async function deepScan(path) {
+            try {
+                const res = await fetch(path);
+                if (!res.ok) { sysLog(`Failed to access ${path}`, "warn"); return; }
+                const text = await res.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(text, 'text/html');
+                const links = Array.from(doc.querySelectorAll('a')).map(a => a.getAttribute('href'));
+                
+                const files = links.filter(l => !l.endsWith('/') && !l.startsWith('?') && !l.startsWith('..'));
+                const folders = links.filter(l => l.endsWith('/') && l !== '/' && !l.includes('..'));
+                
+                if(files.length > 0) sysLog(`> Found ${files.length} files in ${path}`, "success");
+                FOLDER_STRUCTURE[path] = files;
+                for (const f of folders) { await deepScan(path + f); }
+            } catch (e) { sysLog(`Error scanning ${path}: ${e.message}`, "warn"); }
+        }
+
+        function renderTree() {
+            const container = document.getElementById('content-area');
+            container.innerHTML = "";
+            const paths = Object.keys(FOLDER_STRUCTURE).sort();
+            paths.forEach(path => createFolderElement(path, FOLDER_STRUCTURE[path]));
+        }
+
+        function createFolderElement(folderPath, files) {
+            const container = document.getElementById('content-area');
+            const pathParts = folderPath.split('/').filter(p => p && p !== '.');
+            const cleanName = pathParts[pathParts.length - 1] || "root";
+            const sanitizedId = "dir-" + folderPath.replace(/[^a-zA-Z0-9]/g, '-');
+            
+            if (document.getElementById(sanitizedId)) return;
+
+            const section = document.createElement('div');
+            section.className = 'folder-section collapsed'; 
+            section.id = sanitizedId;
+            section.innerHTML = `
+                <div class="folder-header" onclick="toggleSingleFolder(this)">
+                    <h2 class="folder-title"><span class="toggle-icon"></span>/${cleanName}</h2>
+                </div>
+                <div class="grid"></div>`;
+            
+            const grid = section.querySelector('.grid');
+            files.forEach(file => {
+                const fullUrl = folderPath + file;
+                const ext = file.split('.').pop().toLowerCase();
+                const gIndex = GLOBAL_FILE_LIST.length;
+                GLOBAL_FILE_LIST.push({ url: fullUrl, name: file, type: ext });
+                
+                let thumb = `<div style="font-size:3rem; opacity:0.7;">📄</div>`;
+                if(EXT_IMG.includes(ext)) thumb = `<img src="${fullUrl}" loading="lazy">`;
+                if(EXT_VID.includes(ext)) thumb = `<div style="font-size:3rem; opacity:0.7;">🎬</div>`;
+                if(['zip','tar','gz','rar','7z','iso','bin','exe'].includes(ext)) thumb = `<div style="font-size:3rem; opacity:0.7;">📦</div>`;
+                
+                grid.innerHTML += `<div class="file-card" onclick="openUniversalViewer(${gIndex})"><div class="thumb-area">${thumb}</div><div class="file-name">${file}</div></div>`;
+            });
+
+            const parentPath = folderPath.substring(0, folderPath.lastIndexOf('/', folderPath.length - 2) + 1);
+            const parentId = "dir-" + parentPath.replace(/[^a-zA-Z0-9]/g, '-');
+            const parentEl = document.getElementById(parentId);
+            
+            if (parentEl && folderPath !== SCAN_DIR) parentEl.appendChild(section);
+            else container.appendChild(section);
+        }
+
+        function toggleSingleFolder(header) {
+            header.parentElement.classList.toggle('collapsed');
+            header.parentElement.classList.toggle('expanded');
+        }
+
+        function toggleAllFolders() {
+            const all = document.querySelectorAll('.folder-section');
+            const btn = document.getElementById('collapse-all-btn');
+            const isExp = btn.innerText === "expand_all.sh";
+            all.forEach(f => {
+                if (isExp) { f.classList.remove('collapsed'); f.classList.add('expanded'); }
+                else { f.classList.add('collapsed'); f.classList.remove('expanded'); }
+            });
+            btn.innerText = isExp ? "collapse_all.sh" : "expand_all.sh";
+        }
+
+        // --- UNIVERSAL VIEWER V13 LOGIC ---
+        function openUniversalViewer(index) {
+            currentFileIndex = index;
+            const data = GLOBAL_FILE_LIST[index];
+            const ext = data.type;
+            
+            const box = document.getElementById('lightbox');
+            const img = document.getElementById('lb-img');
+            const vid = document.getElementById('lb-video');
+            const frame = document.getElementById('lb-frame');
+            const msg = document.getElementById('lb-msg');
+            const caption = document.getElementById('lb-caption');
+            
+            // 1. Reset everything
+            box.style.display = "flex";
+            [img, vid, frame, msg].forEach(el => el.style.display = 'none');
+            vid.pause(); vid.src = "";
+            frame.src = ""; // Clear iframe to prevent ghost downloads
+            
+            caption.innerText = data.name + ` (${index + 1}/${GLOBAL_FILE_LIST.length})`;
+
+            // 2. Strict Type Checking
+            if (EXT_IMG.includes(ext)) {
+                // Image Mode
+                img.src = data.url; 
+                img.style.display = "block";
+            } 
+            else if (EXT_VID.includes(ext)) {
+                // Video Mode
+                vid.src = data.url; 
+                vid.style.display = "block";
+            } 
+            else if (EXT_DOC.includes(ext)) {
+                // Doc/PDF Mode (Iframe)
+                frame.src = data.url; 
+                frame.style.display = "block";
+            } 
+            else {
+                // Fallback Mode (Binary/Unknown) - Prevents auto-download loops
+                msg.innerHTML = `
+                    <div style="font-size: 4rem; color: #8b949e; margin-bottom: 1rem;">⚠️</div>
+                    <h3 style="color: #ff6b6b; margin-top:0; font-family:var(--font-stack);">PREVIEW UNAVAILABLE</h3>
+                    <p style="color:var(--dim-color);">File format <span style="color:#fff; border:1px solid #30363d; padding:2px 5px; border-radius:4px;">.${ext}</span> cannot be displayed.</p>
+                    <a href="${data.url}" download class="dl-btn">DOWNLOAD FILE</a>
+                `;
+                msg.style.display = "block";
+            }
+        }
+
+        function changeFile(direction) {
+            let newIndex = currentFileIndex + direction;
+            if (newIndex < 0) newIndex = GLOBAL_FILE_LIST.length - 1;
+            if (newIndex >= GLOBAL_FILE_LIST.length) newIndex = 0;
+            openUniversalViewer(newIndex);
+        }
+
+        document.addEventListener('keydown', function(event) {
+            if (document.getElementById('lightbox').style.display === "flex") {
+                if (event.key === "ArrowLeft") changeFile(-1);
+                if (event.key === "ArrowRight") changeFile(1);
+                if (event.key === "Escape") closeLightbox();
+            }
+        });
+
+        function closeLightbox() { 
+            document.getElementById('lightbox').style.display = "none";
+            document.getElementById('lb-video').pause();
+            document.getElementById('lb-frame').src = ""; // Clear iframe on close
+        }
+    </script>
+</body>
+</html>
