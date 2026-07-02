@@ -176,7 +176,7 @@
             display: flex;
             flex-direction: column;
             position: relative;
-            transition: opacity 0.2s ease;
+            transition: opacity 0.2s ease, transform 0.2s ease;
             height: 100%;
             min-height: 0;
             overflow: hidden;
@@ -530,8 +530,7 @@
                             <span>> SECTOR_MAP</span>
                             <span class="drag-handle" id="handle-calendar">[ DRAG_MOVE ]</span>
                         </div>
-                        <div class="calendar-grid" id="calendar">
-                            </div>
+                        <div class="calendar-grid" id="calendar"></div>
                         
                         <div class="ai-log" style="margin-top: 15px; width: 100%;">
                             <div style="color: #484f58; margin-bottom: 5px;">[LOG_DAEMON] Telemetry active.</div>
@@ -557,15 +556,7 @@
                             </div>
                             <div class="status-badge" style="color: var(--success-color); border-color: var(--success-color);">[ ACTIVE ]</div>
                         </a>
-<!--
-                        <a href="chat/" class="service-item">
-                            <div>
-                                <div class="service-name">./secure_uplink.sh</div>
-                                <div class="service-desc">Encrypted Comms Channel</div>
-                            </div>
-                            <div class="status-badge" style="color: var(--accent-color); border-color: var(--accent-color);">[ CONNECT ]</div>
-                        </a>
--->
+
                         <a href="blogs/index.php" class="service-item">
                             <div>
                                 <div class="service-name">/var/logs/BLOGS</div>
@@ -825,40 +816,45 @@
                     if (!isMobile) {
                         if (!isSwapped && deltaX > 140) {
                             mainLayout.classList.add('swapped');
-                            startX = e.clientX;
+                            startX += 200; // Offset anchor reference during swap alignment shifts
                         } else if (isSwapped && deltaX < -140) {
                             mainLayout.classList.remove('swapped');
-                            startX = e.clientX;
+                            startX -= 200;
                         }
                     } else {
+                        // Mobile Layout: Calculate vertical stack translation thresholds
                         if (!isSwapped && deltaY > 100) {
                             mainLayout.classList.add('swapped');
-                            startY = e.clientY;
+                            startY += 150;
                         } else if (isSwapped && deltaY < -100) {
                             mainLayout.classList.remove('swapped');
-                            startY = e.clientY;
+                            startY -= 150;
                         }
                     }
                 });
 
-                const endDragOperation = (e) => {
+                const endDrag = (e) => {
                     if (!isDragging) return;
                     isDragging = false;
-                    handle.releasePointerCapture(e.pointerId);
                     
-                    if (activeColumn) {
-                        activeColumn.classList.remove('dragging-active');
-                        activeColumn.style.opacity = '1';
-                        activeColumn.style.zIndex = '';
-                        activeColumn.style.transform = 'none';
-                    }
+                    activeColumn.classList.remove('dragging-active');
+                    activeColumn.style.transform = '';
+                    activeColumn.style.opacity = '';
+                    activeColumn.style.zIndex = '';
+                    
+                    handle.releasePointerCapture(e.pointerId);
+                    activeColumn = null;
                 };
 
-                handle.addEventListener('pointerup', endDragOperation);
-                handle.addEventListener('pointercancel', endDragOperation);
+                handle.addEventListener('pointerup', endDrag);
+                handle.addEventListener('pointercancel', endDrag);
             });
         }
-        initDragMoveEngine();
+        
+        // Render system loop hook initialization
+        document.addEventListener("DOMContentLoaded", () => {
+            initDragMoveEngine();
+        });
     </script>
 </body>
 </html>
